@@ -1,6 +1,7 @@
 import { serve } from 'inngest/next'
 import { inngest } from '@/lib/inngest/client'
 import { sendInvoiceReminders } from '@/lib/inngest/functions/invoice-reminders'
+import { digestSchedule, digestSend } from '@/lib/inngest/functions/send-digest'
 
 /**
  * Inngest API endpoint
@@ -14,7 +15,9 @@ import { sendInvoiceReminders } from '@/lib/inngest/functions/invoice-reminders'
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
-    sendInvoiceReminders, // Send invoice reminders 5 days before billing
+    sendInvoiceReminders,  // Send invoice reminders 5 days before billing
+    digestSchedule,        // Daily fan-out: fires one digest/send event per user
+    digestSend,            // Per-user: sends digest email, retries independently
   ],
   servePath: '/api/inngest',
 })

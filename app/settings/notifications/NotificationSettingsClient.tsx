@@ -22,31 +22,45 @@ interface Props {
   preferences: NotificationPreferences
 }
 
+// Preset digest times — stored as UTC, displayed as Pacific Time (PST = UTC-8)
+// These labels assume PST. During PDT (UTC-7) they'll be 1hr earlier, which is acceptable.
+const DIGEST_TIME_PRESETS = [
+  { label: '7:00 AM Pacific',  utc: '15:00:00' },
+  { label: '9:00 AM Pacific',  utc: '17:00:00' },
+  { label: '12:00 PM Pacific', utc: '20:00:00' },
+  { label: '3:00 PM Pacific',  utc: '23:00:00' },
+  { label: '5:00 PM Pacific',  utc: '01:00:00' },
+  { label: '8:00 PM Pacific',  utc: '04:00:00' },
+]
+
+const DEFAULT_DIGEST_TIME = '01:00:00' // 5 PM PT
+
 export default function NotificationSettingsClient({ preferences }: Props) {
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
-  const [prefs, setPrefs] = useState<NotificationPreferences>(preferences)
+  const [prefs, setPrefs] = useState<NotificationPreferences>({
+    ...preferences,
+    digest_time: preferences.digest_time || DEFAULT_DIGEST_TIME,
+  })
 
   const handleToggle = (key: keyof Omit<NotificationPreferences, 'delivery_mode' | 'digest_time'>) => {
-    setPrefs(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
+    setPrefs(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleDeliveryModeChange = (mode: 'immediate' | 'digest') => {
     setPrefs(prev => ({
       ...prev,
       delivery_mode: mode,
-      // Fixed time: 5 PM PT = 01:00 UTC next day (during PST) or 00:00 UTC (during PDT)
-      // We'll use 01:00 UTC as the consistent time
-      digest_time: '01:00:00'
+      digest_time: prev.digest_time || DEFAULT_DIGEST_TIME,
     }))
+  }
+
+  const handleDigestTimeChange = (utc: string) => {
+    setPrefs(prev => ({ ...prev, digest_time: utc }))
   }
 
   const handleSave = async () => {
     setIsSaving(true)
-
     try {
       const response = await fetch('/api/settings/notifications', {
         method: 'PUT',
@@ -77,7 +91,7 @@ export default function NotificationSettingsClient({ preferences }: Props) {
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
       title: 'Approval Requests',
-      description: 'When you\'re assigned to approve a document',
+      description: "When you're assigned to approve a document",
       critical: true,
     },
     {
@@ -109,6 +123,9 @@ export default function NotificationSettingsClient({ preferences }: Props) {
     },
   ]
 
+  const selectedPreset = DIGEST_TIME_PRESETS.find(p => p.utc === prefs.digest_time)
+    ?? DIGEST_TIME_PRESETS[4] // default: 5 PM PT
+
   return (
     <div className="space-y-6">
       {/* Info Card */}
@@ -118,7 +135,7 @@ export default function NotificationSettingsClient({ preferences }: Props) {
             <Mail className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm text-blue-900">
-                <strong>Approval requests and rejections</strong> are always sent immediately. 
+                <strong>Approval requests and rejections</strong> are always sent immediately.
                 Other notifications respect your delivery mode preference below.
               </p>
             </div>
@@ -167,19 +184,33 @@ export default function NotificationSettingsClient({ preferences }: Props) {
                   Daily Digest
                 </Label>
                 <p className="text-sm text-gray-600">
-                  Receive a summary once per day at <strong>5:00 PM PT</strong>
+                  Receive a summary email once per day at your chosen time
                 </p>
               </div>
             </div>
           </div>
 
           {prefs.delivery_mode === 'digest' && (
-            <div className="pl-7 pt-2 pb-2 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-900">
-                <strong>📬 Digest Time:</strong> Daily at 5:00 PM Pacific Time
-              </p>
-              <p className="text-xs text-blue-700 mt-1">
-                (Critical notifications like approval requests are still sent immediately)
+            <div className="pl-7 pt-3 pb-3 space-y-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm font-medium text-blue-900">📬 Choose your digest time</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {DIGEST_TIME_PRESETS.map(preset => (
+                  <button
+                    key={preset.utc}
+                    type="button"
+                    onClick={() => handleDigestTimeChange(preset.utc)}
+                    className={`px-3 py-2 text-sm rounded-md border font-medium transition-colors ${
+                      prefs.digest_time === preset.utc
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-blue-700">
+                Times shown in Pacific Time. Critical notifications (approvals, rejections) are always sent immediately.
               </p>
             </div>
           )}
@@ -204,8 +235,8 @@ export default function NotificationSettingsClient({ preferences }: Props) {
                 <div
                   key={type.key}
                   className={`flex items-start gap-4 p-4 rounded-lg border-2 transition-colors ${
-                    enabled 
-                      ? `${type.bgColor} border-transparent` 
+                    enabled
+                      ? `${type.bgColor} border-transparent`
                       : 'bg-gray-50 border-gray-200'
                   }`}
                 >
@@ -215,7 +246,7 @@ export default function NotificationSettingsClient({ preferences }: Props) {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <Label 
+                      <Label
                         htmlFor={type.key}
                         className="text-base font-semibold text-gray-900 cursor-pointer"
                       >
@@ -227,9 +258,7 @@ export default function NotificationSettingsClient({ preferences }: Props) {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600">
-                      {type.description}
-                    </p>
+                    <p className="text-sm text-gray-600">{type.description}</p>
                   </div>
 
                   <Switch
@@ -251,10 +280,7 @@ export default function NotificationSettingsClient({ preferences }: Props) {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-            >
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -276,12 +302,28 @@ export default function NotificationSettingsClient({ preferences }: Props) {
           </h3>
           <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
             <li>Approval requests and rejections are always sent immediately</li>
-            <li>Daily digest emails are sent at 5:00 PM Pacific Time</li>
+            <li>Daily digest bundles your other notifications into one email</li>
+            {prefs.delivery_mode === 'digest' && selectedPreset && (
+              <li>Your digest will be sent daily at <strong>{selectedPreset.label}</strong></li>
+            )}
             <li>You can change these settings at any time</li>
-            <li>Important notifications ensure critical workflow steps aren't missed</li>
           </ul>
         </CardContent>
       </Card>
     </div>
   )
 }
+
+interface NotificationPreferences {
+  approval_requested: boolean
+  approval_completed: boolean
+  document_rejected: boolean
+  document_released: boolean
+  delivery_mode: 'immediate' | 'digest'
+  digest_time: string
+}
+
+interface Props {
+  preferences: NotificationPreferences
+}
+
