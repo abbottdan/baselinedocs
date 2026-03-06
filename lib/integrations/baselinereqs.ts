@@ -19,11 +19,14 @@ const TIMEOUT_MS = 3000
 export interface BaselineReqsReference {
   attachment_id: string
   attachment_title: string
+  item_id: string
   item_title: string
   item_type: string
   item_req_number: string
+  project_id: string
   project_name: string
   project_pid: string
+  reqs_url: string
 }
 
 export interface BaselineReqsLinksResult {

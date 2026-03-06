@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -10,11 +11,38 @@ import {
   MessageCircle,
   Download,
   ArrowRight,
-  CheckCircle
+  CheckCircle,
+  Info
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
+// ── Inline tooltip ────────────────────────────────────────────────────────────
+// Lightweight hover tooltip — avoids adding a shadcn dependency just for help page.
+function Tooltip({ content }: { content: string }) {
+  const [visible, setVisible] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex items-center ml-1.5 cursor-help"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+      onFocus={() => setVisible(true)}
+      onBlur={() => setVisible(false)}
+      tabIndex={0}
+      aria-label={content}
+    >
+      <Info className="h-3.5 w-3.5 text-gray-400 hover:text-blue-500 transition-colors" />
+      {visible && (
+        <span className="absolute left-5 top-0 z-50 w-64 rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-lg leading-relaxed">
+          {content}
+        </span>
+      )}
+    </span>
+  )
+}
 
 const quickStartSteps = [
   {
@@ -39,37 +67,85 @@ const commonTasks = [
   {
     title: 'Creating Documents',
     items: [
-      'Choose the right document type',
-      'Understanding Prototype vs Production',
-      'Uploading and managing files',
-      'Assigning project codes'
+      {
+        label: 'Choose the right document type',
+        tip: 'Document types (e.g. Form, Procedure, Work Instruction) are configured by your admin. Each type gets its own prefix and sequential numbering — e.g. FORM-00001, PROC-00002. Pick the type that matches your document\'s purpose.'
+      },
+      {
+        label: 'Understanding Prototype vs Production',
+        tip: 'Prototype documents use alphabetic versions (vA, vB, vC) and are for development or testing. Production documents use numeric versions (v1, v2, v3) and represent formally released content. Start with Prototype; promote to Production when the document is ready for official use.'
+      },
+      {
+        label: 'Uploading and managing files',
+        tip: 'Attach PDFs, Word docs, Excel files, images, or CSVs — up to 50 MB per file, 20 files per document. Files can be added or removed while the document is in Draft. Once submitted for approval, attachments are locked until the document returns to Draft.'
+      },
+      {
+        label: 'Assigning project codes',
+        tip: 'Project codes let you group related documents together (e.g. all documents for a specific initiative or client). Enter any identifier that makes sense for your organization. You can then filter the document list by project code to see all related documents at once.'
+      },
     ]
   },
   {
     title: 'Approval Workflows',
     items: [
-      'Assigning approvers to documents',
-      'Reviewing documents as an approver',
-      'Handling rejection feedback',
-      'Tracking approval progress'
+      {
+        label: 'Assigning approvers to documents',
+        tip: 'On the document creation or edit page, search for users by name or email and add them as approvers. You can assign multiple approvers. All assigned approvers must approve before the document is released — a single rejection returns it to Draft.'
+      },
+      {
+        label: 'Reviewing documents as an approver',
+        tip: 'When you\'re assigned to review a document, it appears in "My Approvals" in the navigation. Open the document to review its content and attached files, then click Approve or Reject at the bottom of the page. Rejection requires a comment explaining what needs to change.'
+      },
+      {
+        label: 'Handling rejection feedback',
+        tip: 'If your document is rejected, it returns to Draft and the rejection reason appears highlighted on the document page. Make your revisions and re-submit for approval. You can also update the approver list before resubmitting if needed.'
+      },
+      {
+        label: 'Tracking approval progress',
+        tip: 'The Approval Workflow section on the document detail page shows each approver\'s status (Pending, Approved, or Rejected) along with the date and any comments. The counter at the top shows how many of the total approvers have approved so far.'
+      },
     ]
   },
   {
     title: 'Version Control',
     items: [
-      'Creating new document versions',
-      'Understanding version numbering (vA, vB vs v1, v2)',
-      'Viewing version history',
-      'Promoting Prototype to Production'
+      {
+        label: 'Creating new document versions',
+        tip: 'From a Released document, click "Create New Version". This creates a new Draft that copies the metadata from the previous version. The new version goes through the full creation and approval process independently. The previous Released version remains visible in the version history.'
+      },
+      {
+        label: 'Understanding version numbering (vA, vB vs v1, v2)',
+        tip: 'Prototype versions use letters: vA, vB, vC, etc. Each time you create a new version of a Prototype, the letter increments. Production versions use numbers: v1, v2, v3, etc. When you promote a Prototype to Production, versioning resets to v1 regardless of how many Prototype versions existed.'
+      },
+      {
+        label: 'Viewing version history',
+        tip: 'The Version History section at the bottom of any document page shows all versions of that document number, each with its status and a direct link. This makes it easy to navigate between the current Released version and any prior Obsolete versions.'
+      },
+      {
+        label: 'Promoting Prototype to Production',
+        tip: 'When a Prototype document is Released, a "Promote to Production" button appears. This creates a new Production document (v1) with the same document number. The Prototype lineage (vA, vB…) and the Production lineage (v1, v2…) are tracked separately — neither is deleted when you promote.'
+      },
     ]
   },
   {
     title: 'Document Management',
     items: [
-      'Searching and filtering documents',
-      'Understanding document statuses',
-      'Managing obsolete documents',
-      'Using the audit trail'
+      {
+        label: 'Searching and filtering documents',
+        tip: 'Use the search box on the All Documents page to find documents by number or title. Filters let you narrow by document type, status, and project code. The "My Documents" toggle shows only documents you created or revised. Combine search and filters to zero in quickly.'
+      },
+      {
+        label: 'Understanding document statuses',
+        tip: 'Draft (gray) — being created or revised, only visible to the creator and admins. In Approval (yellow) — submitted and awaiting reviewer decisions. Released (green) — approved and visible to everyone in your organization. Obsolete (dark gray) — superseded by a newer Released version, still accessible for reference.'
+      },
+      {
+        label: 'Managing obsolete documents',
+        tip: 'When a new version of a document is Released, the previous Released version automatically becomes Obsolete. Obsolete documents are read-only and cannot be edited or versioned, but they remain accessible for audit and compliance purposes. A "See Latest Released" button links directly to the current active version.'
+      },
+      {
+        label: 'Using the audit trail',
+        tip: 'Every document has a complete audit trail showing all actions: creation, edits, file uploads, approvals, rejections, releases, and version changes — with the user and timestamp for each. The audit trail is read-only and cannot be altered. It appears at the bottom of every document detail page.'
+      },
     ]
   }
 ]
@@ -248,7 +324,10 @@ export default function HelpPage() {
                     {section.items.map((item, itemIndex) => (
                       <li key={itemIndex} className="flex items-start gap-2">
                         <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-700">{item}</span>
+                        <span className="text-gray-700 flex items-center flex-wrap">
+                          {item.label}
+                          <Tooltip content={item.tip} />
+                        </span>
                       </li>
                     ))}
                   </ul>

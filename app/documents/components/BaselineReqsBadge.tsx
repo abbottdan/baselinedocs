@@ -82,14 +82,19 @@ export default function BaselineReqsBadge({ refs }: BaselineReqsBadgeProps) {
             {refs.references.map((ref) => (
               <li key={ref.attachment_id} className="flex items-start gap-2">
                 <ExternalLink className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-red-400" />
-                <span className="text-slate-800 leading-snug">
-                  <span className="font-medium text-slate-900">{ref.item_req_number}</span>
+                <a
+                  href={ref.reqs_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-800 leading-snug hover:text-red-700 transition-colors group"
+                >
+                  <span className="font-medium text-slate-900 group-hover:text-red-700">{ref.item_req_number}</span>
                   <span className="text-slate-500 mx-1">—</span>
                   {ref.item_title}
                   <span className="ml-1.5 text-xs text-slate-400">
                     {ref.project_name}
                   </span>
-                </span>
+                </a>
               </li>
             ))}
           </ul>
