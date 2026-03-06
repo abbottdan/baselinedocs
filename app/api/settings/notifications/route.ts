@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest) {
         digest_time,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'user_id,tenant_id'
+        onConflict: 'user_id'
       })
 
     if (error) {
