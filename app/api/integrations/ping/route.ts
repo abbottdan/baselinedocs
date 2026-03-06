@@ -31,8 +31,8 @@ export async function GET(req: NextRequest) {
   const host = req.headers.get('host') ?? ''
   const subdomain = host.split('.')[0]
 
-  // Reject non-tenant subdomains — these have no meaningful tenant to ping
-  if (!subdomain || subdomain === 'app' || subdomain === 'www') {
+  // Only reject if there's no subdomain at all (bare domain hit)
+  if (!subdomain) {
     return NextResponse.json({ exists: false }, { status: 404 })
   }
 

@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const host = req.headers.get('host') ?? ''
   const subdomain = host.split('.')[0]
 
-  if (!subdomain || subdomain === 'app' || subdomain === 'www') {
+  if (!subdomain) {
     return NextResponse.json({ error: 'Invalid subdomain' }, { status: 400 })
   }
 
