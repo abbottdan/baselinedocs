@@ -9,6 +9,7 @@ const baseTabs = [
   { href: '/admin/billing', label: 'Billing' },
   { href: '/admin/settings', label: 'Company Settings' },
   { href: '/admin/document-types', label: 'Document Types' },
+  { href: '/admin/export', label: 'Export' },
 ]
 
 interface AdminNavTabsProps {

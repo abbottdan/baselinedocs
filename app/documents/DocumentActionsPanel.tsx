@@ -368,7 +368,7 @@ export default function DocumentActionsPanel({
 
       {/* Audit Trail */}
       <CollapsibleSection title="Audit Trail" defaultOpen={false} sectionKey="audit">
-        <AuditTrail auditLogs={auditLogs} />
+        <AuditTrail auditLogs={auditLogs} documentNumber={documentNumber} />
       </CollapsibleSection>
 
       {/* Admin Actions */}
