@@ -104,11 +104,7 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
-  console.log('[Debug] userError:', JSON.stringify(userError))
-  console.log('[Debug] userData:', JSON.stringify(userData))
-
-  // Resolve the user home tenant subdomain from the platform DB.
+    // Resolve the user home tenant subdomain from the platform DB.
   const platform = createPlatformClient()
   const { data: tenant } = await platform
     .schema('platform')
@@ -131,7 +127,9 @@ export async function middleware(request: NextRequest) {
     redirectUrl.searchParams.set('message', `You belong to ${userTenantSubdomain}.${APP_DOMAIN}`)
     return NextResponse.redirect(redirectUrl)
   }
-
+  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
+  console.log('[Debug] userError:', JSON.stringify(userError))
+  console.log('[Debug] userData:', JSON.stringify(userData))
   console.log('[Middleware] Tenant match — access granted')
 
   if (pathname.startsWith('/system-admin')) {
