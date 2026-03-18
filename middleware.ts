@@ -80,6 +80,10 @@ export async function middleware(request: NextRequest) {
     .eq('id', user.id)
     .single()
 
+  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
+  console.log('[Debug] userError:', JSON.stringify(userError))
+  console.log('[Debug] userData:', JSON.stringify(userData))
+
   if (!userData || userError) {
     console.log('[Middleware] User not found in shared.users:', user.email)
     const redirectUrl = new URL('/auth/error', request.url)
@@ -127,9 +131,7 @@ export async function middleware(request: NextRequest) {
     redirectUrl.searchParams.set('message', `You belong to ${userTenantSubdomain}.${APP_DOMAIN}`)
     return NextResponse.redirect(redirectUrl)
   }
-  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
-  console.log('[Debug] userError:', JSON.stringify(userError))
-  console.log('[Debug] userData:', JSON.stringify(userData))
+  
   console.log('[Middleware] Tenant match — access granted')
 
   if (pathname.startsWith('/system-admin')) {
