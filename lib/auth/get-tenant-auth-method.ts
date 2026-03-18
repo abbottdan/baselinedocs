@@ -1,42 +1,48 @@
 /**
- * Get tenant's configured authentication method
  * lib/auth/get-tenant-auth-method.ts
+ *
+ * CHANGED: Now queries clearstride_platform via createPlatformClient()
+ * instead of the product DB. The tenants table (and auth_method column)
+ * lives in platform.tenants — there is no tenants table in the product DB.
  */
 
-import { createClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 
 export type AuthMethod = 'google' | 'microsoft' | 'email'
 
 /**
- * Get the authentication method configured for a tenant
+ * Returns the authentication method configured for a tenant.
+ * Falls back to 'email' if the subdomain is not found in the platform DB.
  */
 export async function getTenantAuthMethod(subdomain: string): Promise<AuthMethod> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
+  const platform = createPlatformClient()
+
+  const { data, error } = await platform
     .from('tenants')
     .select('auth_method')
     .eq('subdomain', subdomain)
     .single()
 
   if (error || !data) {
-    console.log('[Auth] Tenant not found or error, defaulting to email:', subdomain)
-    return 'email' // Safe default
+    console.log('[Auth] Tenant not found in platform DB, defaulting to email:', subdomain)
+    return 'email'
   }
 
-  return data.auth_method as AuthMethod
+  return (data.auth_method as AuthMethod) ?? 'email'
 }
 
 /**
- * Check if a subdomain exists and return tenant info
+ * Checks whether a subdomain is available for registration.
+ * Queries platform.tenants AND platform.subdomain_reservations via the
+ * check_subdomain_available() Postgres function.
  */
 export async function checkSubdomainAvailability(subdomain: string): Promise<{
   available: boolean
   tenant?: { id: string; auth_method: AuthMethod }
 }> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
+  const platform = createPlatformClient()
+
+  const { data, error } = await platform
     .from('tenants')
     .select('id, auth_method')
     .eq('subdomain', subdomain)
@@ -46,11 +52,11 @@ export async function checkSubdomainAvailability(subdomain: string): Promise<{
     return { available: true }
   }
 
-  return { 
+  return {
     available: false,
     tenant: {
       id: data.id,
-      auth_method: data.auth_method as AuthMethod
-    }
+      auth_method: (data.auth_method as AuthMethod) ?? 'email',
+    },
   }
 }
