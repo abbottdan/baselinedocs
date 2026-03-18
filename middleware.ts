@@ -104,6 +104,10 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
+  console.log('[Debug] userError:', JSON.stringify(userError))
+  console.log('[Debug] userData:', JSON.stringify(userData))
+
   // Resolve the user home tenant subdomain from the platform DB.
   const platform = createPlatformClient()
   const { data: tenant } = await platform
