@@ -2,8 +2,10 @@
  * app/auth/callback/route.ts — BaselineDocs
  *
  * CHANGED:
- *  - Tenant lookup now uses createPlatformClient() (platform.tenants)
- *  - User lookup now uses createSharedClient() (shared.users)
+ *  - Tenant lookup uses createPlatformClient() with .schema('platform')
+ *  - User lookup uses createSharedClient() with .schema('shared')
+ *    NOTE: .schema() must be chained on every query — the db.schema
+ *    constructor option is silently ignored by the base supabase-js client.
  */
 
 import { createClient, createSharedClient } from '@/lib/supabase/server'
@@ -21,14 +23,12 @@ export async function GET(request: Request) {
   console.log('[Auth Callback] START — origin:', origin, 'has code:', !!code)
 
   if (!code) {
-    console.log('[Auth Callback] No code — redirecting to home')
     return NextResponse.redirect(`${origin}/`)
   }
 
   const cookieStore = await cookies()
   const supabase    = await createClient()
 
-  // Exchange the OAuth code for a session
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
   if (exchangeError) {
     console.error('[Auth Callback] Exchange error:', exchangeError)
@@ -37,31 +37,20 @@ export async function GET(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    console.error('[Auth Callback] No user after exchange')
     return NextResponse.redirect(`${origin}/`)
   }
 
-  console.log('[Auth Callback] User:', user.email)
-
-  // Resolve subdomain — OAuth flows use oauth_origin_subdomain cookie set by
-  // the sign-in button; email/password flows use the middleware tenant_subdomain cookie.
   const oauthOriginCookie = cookieStore.get('oauth_origin_subdomain')
   let subdomain = oauthOriginCookie?.value
+  if (!subdomain) subdomain = cookieStore.get('tenant_subdomain')?.value
+  if (!subdomain) subdomain = 'app'
 
-  if (!subdomain) {
-    subdomain = cookieStore.get('tenant_subdomain')?.value
-    console.log('[Auth Callback] Fallback to tenant cookie:', subdomain)
-  }
-  if (!subdomain) {
-    subdomain = 'app'
-    console.log('[Auth Callback] Defaulting subdomain to: app')
-  }
+  console.log('[Auth Callback] User:', user.email, 'subdomain:', subdomain)
 
-  console.log('[Auth Callback] Final subdomain:', subdomain)
-
-  // ── Tenant lookup — CHANGED to platform DB ────────────────────────────────
+  // Tenant lookup — platform DB with explicit .schema('platform')
   const platform = createPlatformClient()
   const { data: tenant, error: tenantError } = await platform
+    .schema('platform')
     .from('tenants')
     .select('id, company_name, subdomain')
     .eq('subdomain', subdomain)
@@ -69,25 +58,23 @@ export async function GET(request: Request) {
     .single()
 
   if (tenantError || !tenant) {
-    console.log('[Auth Callback] Tenant not found in platform for subdomain:', subdomain)
+    console.log('[Auth Callback] Tenant not found for subdomain:', subdomain)
     if (oauthOriginCookie) cookieStore.delete('oauth_origin_subdomain')
     return NextResponse.redirect(`${origin}/auth/error?message=tenant_not_found`)
   }
 
-  console.log('[Auth Callback] Found tenant:', tenant.company_name)
-
-  // ── User lookup — CHANGED to shared.users ─────────────────────────────────
+  // User lookup — shared schema with explicit .schema('shared')
   const sharedClient = createSharedClient()
   const { data: userRecord, error: userError } = await sharedClient
+    .schema('shared')
     .from('users')
     .select('tenant_id, is_master_admin, full_name')
     .eq('id', user.id)
     .maybeSingle()
 
-  // User not in shared.users — access is invite-only
   if (!userRecord && (!userError || userError.code === 'PGRST116')) {
-    console.log('[Auth Callback] 🚨 User not in shared.users — access denied:', user.email)
-    await sharedClient.auth.admin.signOut(user.id, 'global').catch(() => {})
+    console.log('[Auth Callback] User not in shared.users — access denied:', user.email)
+    await supabase.auth.signOut()
     if (oauthOriginCookie) cookieStore.delete('oauth_origin_subdomain')
     return NextResponse.redirect(
       `${origin}/auth/error?message=You+are+not+authorised+to+access+this+organisation.+Please+contact+your+administrator.`
@@ -105,40 +92,29 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/error?message=user_record_null`)
   }
 
-  console.log('[Auth Callback] User record: tenant_id=%s is_master_admin=%s',
-    userRecord.tenant_id, userRecord.is_master_admin)
-
   // Backfill full_name from OAuth metadata if missing
-  const fullName = userRecord.full_name ||
-    user.user_metadata?.full_name ||
-    user.user_metadata?.name ||
-    user.email?.split('@')[0] ||
-    'User'
-
   if (!userRecord.full_name) {
+    const fullName = user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split('@')[0] || 'User'
     await sharedClient
+      .schema('shared')
       .from('users')
       .update({ full_name: fullName })
       .eq('id', user.id)
-    console.log('[Auth Callback] Backfilled full_name:', fullName)
   }
 
   if (oauthOriginCookie) cookieStore.delete('oauth_origin_subdomain')
 
-  // Master admins can access any tenant
   if (userRecord.is_master_admin) {
-    console.log('[Auth Callback] Master admin — access granted')
-    const redirectUrl = `https://${subdomain}.${DASHBOARD_DOMAIN}/dashboard`
-    return NextResponse.redirect(redirectUrl)
+    console.log('[Auth Callback] Master admin — redirecting')
+    return NextResponse.redirect(`https://${subdomain}.${DASHBOARD_DOMAIN}/dashboard`)
   }
 
-  // Regular users must belong to this tenant
   if (userRecord.tenant_id !== tenant.id) {
-    console.error('[Auth Callback] Tenant mismatch — user tenant:', userRecord.tenant_id, 'requested:', tenant.id)
+    console.error('[Auth Callback] Tenant mismatch')
     return NextResponse.redirect(`${origin}/auth/error?message=tenant_mismatch`)
   }
 
-  const redirectUrl = `https://${subdomain}.${DASHBOARD_DOMAIN}/dashboard`
-  console.log('[Auth Callback] Redirecting to:', redirectUrl)
-  return NextResponse.redirect(redirectUrl)
+  return NextResponse.redirect(`https://${subdomain}.${DASHBOARD_DOMAIN}/dashboard`)
 }

@@ -2,11 +2,10 @@
  * middleware.ts — BaselineDocs
  *
  * CHANGED:
- *  - Tenant lookup (.from('tenants')) now uses createPlatformClient()
- *    because platform.tenants is the source of truth — there is no
- *    tenants table in the product DB.
- *  - User lookup (.from('users')) now targets shared.users via
- *    createSharedClient() (service-role, scoped to the shared schema).
+ *  - Tenant lookup uses createPlatformClient() (platform.tenants)
+ *  - User lookup uses createSharedClient() with explicit .schema('shared')
+ *    NOTE: db.schema in the supabase-js constructor is ignored for the base
+ *    client — .schema() must be chained on the query itself.
  */
 
 import { NextResponse } from 'next/server'
@@ -39,16 +38,14 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  const hostname = request.headers.get('host') || ''
-  const pathname = request.nextUrl.pathname
+  const hostname  = request.headers.get('host') || ''
+  const pathname  = request.nextUrl.pathname
   const subdomain = extractSubdomain(hostname)
 
-  console.log('[Middleware] hostname:', hostname, '→ subdomain:', subdomain, 'path:', pathname)
+  console.log('[Middleware] hostname:', hostname, 'subdomain:', subdomain, 'path:', pathname)
 
   const response = NextResponse.next()
 
-  // Always stamp the subdomain cookie so the login page and auth callback
-  // know which tenant context they're operating in.
   if (subdomain) {
     response.cookies.set('tenant_subdomain', subdomain, {
       httpOnly: true,
@@ -60,32 +57,31 @@ export async function middleware(request: NextRequest) {
     })
   }
 
-  // Public paths pass through without auth checks.
   if (isPublicPath(pathname)) {
     return response
   }
-
-  // ── Authenticated route checks ────────────────────────────────────────────
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    const loginUrl = new URL('/auth/login', request.url)
+    const loginUrl = new URL('/', request.url)
     loginUrl.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Look up user in shared.users (product DB, shared schema)
+  // .schema('shared') must be chained on the query — the db.schema constructor
+  // option is silently ignored by the base @supabase/supabase-js client.
   const sharedClient = createSharedClient()
   const { data: userData, error: userError } = await sharedClient
+    .schema('shared')
     .from('users')
     .select('tenant_id, is_master_admin, is_active, role')
     .eq('id', user.id)
     .single()
 
   if (!userData || userError) {
-    console.log('[Middleware] 🚨 User not found in shared.users:', user.email)
+    console.log('[Middleware] User not found in shared.users:', user.email)
     const redirectUrl = new URL('/auth/error', request.url)
     redirectUrl.searchParams.set('message', 'Account setup incomplete. Please contact support.')
     return NextResponse.redirect(redirectUrl)
@@ -103,23 +99,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Master admins bypass subdomain verification — they can visit any tenant.
   if (userData.is_master_admin) {
-    console.log('[Middleware] ✅ Master admin — access granted')
-
-    if (pathname.startsWith('/system-admin')) {
-      // allowed
-    } else if (pathname.startsWith('/admin')) {
-      // allowed
-    }
-
+    console.log('[Middleware] Master admin — access granted')
     return response
   }
 
-  // Look up the user's home tenant subdomain from the platform DB.
-  // CHANGED: was supabase.from('tenants') on the product DB.
+  // Resolve the user home tenant subdomain from the platform DB.
   const platform = createPlatformClient()
   const { data: tenant } = await platform
+    .schema('platform')
     .from('tenants')
     .select('subdomain')
     .eq('id', userData.tenant_id)
@@ -128,26 +116,23 @@ export async function middleware(request: NextRequest) {
   const userTenantSubdomain = tenant?.subdomain
 
   if (!userTenantSubdomain) {
-    console.log('[Middleware] 🚨 Tenant not found in platform for user:', user.email)
+    console.log('[Middleware] Tenant not found in platform for user:', user.email)
     const redirectUrl = new URL('/auth/error', request.url)
     redirectUrl.searchParams.set('message', 'Organisation not found. Please contact support.')
     return NextResponse.redirect(redirectUrl)
   }
 
   if (userTenantSubdomain !== subdomain) {
-    console.log('[Middleware] 🚨 TENANT MISMATCH — belongs to:', userTenantSubdomain, 'accessing:', subdomain)
     const redirectUrl = new URL('/auth/error', request.url)
     redirectUrl.searchParams.set('message', `You belong to ${userTenantSubdomain}.${APP_DOMAIN}`)
     return NextResponse.redirect(redirectUrl)
   }
 
-  console.log('[Middleware] ✅ Tenant match — access granted')
+  console.log('[Middleware] Tenant match — access granted')
 
-  // Route guards
   if (pathname.startsWith('/system-admin')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-
   if (pathname.startsWith('/admin')) {
     if (!['tenant_admin', 'master_admin'].includes(userData.role ?? '')) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -158,7 +143,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

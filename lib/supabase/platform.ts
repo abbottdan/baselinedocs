@@ -172,6 +172,7 @@ export async function getTenantBySubdomain(
   const platform = createPlatformClient()
 
   const { data, error } = await platform
+    .schema('platform')
     .from('tenants')
     .select('*')
     .eq('subdomain', subdomain.toLowerCase())
@@ -204,6 +205,7 @@ export async function getProductSubscription(
   const platform = createPlatformClient()
 
   const { data, error } = await platform
+    .schema('platform')
     .from('product_subscriptions')
     .select('*')
     .eq('tenant_id', tenantId)
@@ -283,6 +285,7 @@ export async function getStripeCustomerId(
   const platform = createPlatformClient()
 
   const { data, error } = await platform
+    .schema('platform')
     .from('tenants')
     .select('stripe_customer_id')
     .eq('id', tenantId)
@@ -303,6 +306,7 @@ export async function setStripeCustomerId(
   const platform = createPlatformClient()
 
   const { error } = await platform
+    .schema('platform')
     .from('tenants')
     .update({ stripe_customer_id: stripeCustomerId })
     .eq('id', tenantId)
@@ -324,6 +328,7 @@ export async function getTenantIdByStripeCustomer(
   const platform = createPlatformClient()
 
   const { data, error } = await platform
+    .schema('platform')
     .from('tenants')
     .select('id')
     .eq('stripe_customer_id', stripeCustomerId)
