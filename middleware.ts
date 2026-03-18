@@ -80,9 +80,11 @@ export async function middleware(request: NextRequest) {
     .eq('id', user.id)
     .single()
 
-  console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 40))
-  console.log('[Debug] userError:', JSON.stringify(userError))
-  console.log('[Debug] userData:', JSON.stringify(userData))
+  / TEMPORARY DEBUG — remove after confirming
+console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(-20))
+console.log('[Debug] userError code:', userError?.code)
+console.log('[Debug] userError message:', userError?.message)
+console.log('[Debug] userData:', userData ? 'found' : 'null')
 
   if (!userData || userError) {
     console.log('[Middleware] User not found in shared.users:', user.email)
