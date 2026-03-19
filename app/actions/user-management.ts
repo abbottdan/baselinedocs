@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/require-admin'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logger, logServerAction, logError } from '@/lib/logger'
@@ -43,48 +44,14 @@ export async function getAllUsers() {
     const userId = user.id
     const userEmail = user.email
 
-    // Check admin status and get tenant_id
-    const sharedClient = createSharedClient()
-    const { data: sharedUser } = await sharedClient
-      .schema('shared')
-      .from('users')
-      .select('tenant_id, is_master_admin')
-      .eq('id', userId)
-      .single()
-
-    let isAdmin = sharedUser?.is_master_admin ?? false
-    if (sharedUser && !sharedUser.is_master_admin) {
-      const { data: roleRow } = await supabase
-        .schema('docs')
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('tenant_id', sharedUser.tenant_id)
-        .single()
-      isAdmin = ['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')
+    // Check admin status
+    const { isAdmin, isMasterAdmin, tenantId: userTenantId, error: adminError } = await requireAdmin(userId, supabase)
+    if (!isAdmin) {
+      logger.warn('Non-admin attempted to access user list', { userId, userEmail })
+      return { success: false, error: 'Only administrators can view user list', data: [] }
     }
 
-    const userData = sharedUser ? { ...sharedUser, is_admin: isAdmin } : null
-
-    if (!userData?.is_admin) {
-      logger.warn('Non-admin attempted to access user list', {
-        userId,
-        userEmail,
-        isAdmin
-      })
-      return {
-        success: false,
-        error: 'Only administrators can view user list',
-        data: []
-      }
-    }
-
-    logger.debug('Fetching users for tenant', {
-      userId,
-      userEmail,
-      tenantId: userData.tenant_id,
-      isMasterAdmin: userData.is_master_admin
-    })
+    logger.debug('Fetching users for tenant', { userId, userEmail, tenantId: userTenantId, isMasterAdmin })
 
     // Get subdomain tenant (not user's home tenant)
     const targetTenantId = await getSubdomainTenantId()
@@ -173,8 +140,8 @@ export async function getAllUsers() {
     logger.info('User list fetched successfully', {
       userId,
       userCount: usersWithStats.length,
-      tenantId: userData.tenant_id,
-      isMasterAdmin: userData.is_master_admin,
+      tenantId: userTenantId,
+      isMasterAdmin,
       duration
     })
 

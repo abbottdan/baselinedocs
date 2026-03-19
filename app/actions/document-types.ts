@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/require-admin'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logger, logServerAction, logError, logDatabaseQuery } from '@/lib/logger'
@@ -49,26 +50,14 @@ export async function createDocumentType(data: { name: string; prefix: string; d
     const userEmail = user.email
 
     // Check admin status
-          const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _isAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
-          .schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id)
-          .eq('tenant_id', _su.tenant_id).single()
-        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
+    const { isAdmin, isMasterAdmin, tenantId: _adminTenantId } = await requireAdmin(user.id, supabase)
+    const userData = { is_admin: isAdmin, tenant_id: _adminTenantId }
 
-    if (!userData?.is_admin) {
+    if (!isAdmin) {
       logger.warn('Non-admin attempted document type creation', { 
         userId, 
         userEmail,
-        isAdmin: userData?.is_admin 
+        isAdmin,
       })
       return { 
         success: false, 
@@ -167,8 +156,10 @@ export async function createDocumentType(data: { name: string; prefix: string; d
       }
     }
 
-    // Insert new document type
-    const { data: newType, error: insertError } = await supabase
+    // Insert new document type (service role bypasses RLS for master admin cross-tenant ops)
+    const srClient = createServiceRoleClient()
+    const { data: newType, error: insertError } = await srClient
+      .schema('docs')
       .from('document_types')
       .insert({
         name: sanitizedData.name,
@@ -269,27 +260,15 @@ export async function updateDocumentType(id: string, data: { name: string; descr
     const userEmail = user.email
 
     // Check admin status
-          const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _isAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
-          .schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id)
-          .eq('tenant_id', _su.tenant_id).single()
-        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
+    const { isAdmin, isMasterAdmin, tenantId: _adminTenantId } = await requireAdmin(user.id, supabase)
+    const userData = { is_admin: isAdmin, tenant_id: _adminTenantId }
 
-    if (!userData?.is_admin) {
+    if (!isAdmin) {
       logger.warn('Non-admin attempted document type update', { 
         userId, 
         userEmail,
         documentTypeId: id,
-        isAdmin: userData?.is_admin 
+        isAdmin,
       })
       return { 
         success: false, 
@@ -358,8 +337,10 @@ export async function updateDocumentType(id: string, data: { name: string; descr
       }
     }
 
-    // Update document type
-    const { data: updatedType, error: updateError } = await supabase
+    // Update document type (service role bypasses RLS)
+    const srClient2 = createServiceRoleClient()
+    const { data: updatedType, error: updateError } = await srClient2
+      .schema('docs')
       .from('document_types')
       .update(sanitizedData)
       .eq('id', id)
@@ -450,27 +431,15 @@ export async function deleteDocumentType(id: string) {
     const userEmail = user.email
 
     // Check admin status
-          const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _isAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
-          .schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id)
-          .eq('tenant_id', _su.tenant_id).single()
-        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
+    const { isAdmin, isMasterAdmin, tenantId: _adminTenantId } = await requireAdmin(user.id, supabase)
+    const userData = { is_admin: isAdmin, tenant_id: _adminTenantId }
 
-    if (!userData?.is_admin) {
+    if (!isAdmin) {
       logger.warn('Non-admin attempted document type deletion', { 
         userId,
         userEmail,
         documentTypeId: id,
-        isAdmin: userData?.is_admin 
+        isAdmin,
       })
       return { 
         success: false, 
@@ -611,27 +580,15 @@ export async function toggleDocumentTypeStatus(id: string) {
     const userEmail = user.email
 
     // Check admin status
-          const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _isAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
-          .schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id)
-          .eq('tenant_id', _su.tenant_id).single()
-        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
+    const { isAdmin, isMasterAdmin, tenantId: _adminTenantId } = await requireAdmin(user.id, supabase)
+    const userData = { is_admin: isAdmin, tenant_id: _adminTenantId }
 
-    if (!userData?.is_admin) {
+    if (!isAdmin) {
       logger.warn('Non-admin attempted status toggle', { 
         userId,
         userEmail,
         documentTypeId: id,
-        isAdmin: userData?.is_admin 
+        isAdmin,
       })
       return { 
         success: false, 
@@ -661,8 +618,10 @@ export async function toggleDocumentTypeStatus(id: string) {
       newStatus: newStatus ? 'active' : 'inactive'
     })
 
-    // Update status
-    const { data: updatedType, error: updateError } = await supabase
+    // Update status (service role bypasses RLS)
+    const srClient3 = createServiceRoleClient()
+    const { data: updatedType, error: updateError } = await srClient3
+      .schema('docs')
       .from('document_types')
       .update({ is_active: newStatus })
       .eq('id', id)
@@ -831,22 +790,10 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
     const userEmail = user.email
 
     // Check admin status
-          const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _isAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
-          .schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id)
-          .eq('tenant_id', _su.tenant_id).single()
-        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
+    const { isAdmin, isMasterAdmin, tenantId: _adminTenantId } = await requireAdmin(user.id, supabase)
+    const userData = { is_admin: isAdmin, tenant_id: _adminTenantId }
 
-    if (!userData?.is_admin) {
+    if (!isAdmin) {
       logger.warn('Non-admin attempted counter reset', { 
         userId, 
         userEmail,
