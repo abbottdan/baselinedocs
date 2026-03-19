@@ -11,7 +11,7 @@
  *
  * Required environment variables (add to .env.local and Vercel/hosting env):
  *   PLATFORM_SUPABASE_URL          — Supabase project URL for clearstride_platform
- *   PLATFORM_SUPABASE_SERVICE_KEY  — Service role key for clearstride_platform
+ *   PLATFORM_SUPABASE_SERVICE_ROLE_KEY  — Service role key for clearstride_platform
  *                                    (NOT the anon key — we always need to bypass RLS here)
  *
  * Usage:
@@ -54,7 +54,7 @@ import { createClient } from '@supabase/supabase-js'
 
 function getPlatformEnv(): { url: string; serviceKey: string } {
   const url        = process.env.PLATFORM_SUPABASE_URL
-  const serviceKey = process.env.PLATFORM_SUPABASE_SERVICE_KEY
+  const serviceKey = process.env.PLATFORM_SUPABASE_SERVICE_ROLE_KEY
 
   if (!url) {
     throw new Error(
@@ -64,7 +64,7 @@ function getPlatformEnv(): { url: string; serviceKey: string } {
   }
   if (!serviceKey) {
     throw new Error(
-      '[platform] PLATFORM_SUPABASE_SERVICE_KEY is not set. ' +
+      '[platform] PLATFORM_SUPABASE_SERVICE_ROLE_KEY is not set. ' +
       'Add it to .env.local and your hosting environment. ' +
       'This must be the SERVICE ROLE key, not the anon key.'
     )

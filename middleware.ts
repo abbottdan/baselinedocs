@@ -37,8 +37,6 @@ export async function middleware(request: NextRequest) {
   const pathname  = request.nextUrl.pathname
   const subdomain = extractSubdomain(hostname)
 
-  console.log('[Middleware] VERSION: role-fix-applied')
-
   console.log('[Middleware] hostname:', hostname, 'subdomain:', subdomain, 'path:', pathname)
 
   const response = NextResponse.next()
