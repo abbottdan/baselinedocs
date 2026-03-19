@@ -39,7 +39,7 @@ export default async function DashboardPage() {
     const { data: tenantData } = await platformClient
       .schema('platform')
       .from('tenants')
-      .select('id, company_name, subdomain, logo_url')
+      .select('id, company_name, subdomain, logo_url, timezone')
       .eq('id', userData?.tenant_id)
       .single()
     
