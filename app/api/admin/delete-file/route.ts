@@ -80,7 +80,6 @@ export async function POST(request: NextRequest) {
     // Delete from storage
     const { error: storageError } = await supabase
       .storage
-      .schema('docs')
       .from('documents')
       .remove([file.file_path])
 

@@ -140,7 +140,6 @@ export async function updateDocumentWithFiles(formData: FormData) {
         // Upload to Supabase Storage (use service role to bypass RLS)
         const supabaseAdmin = createServiceRoleClient()
         const { error: uploadError } = await supabaseAdmin.storage
-          .schema('docs')
           .from('documents')
           .upload(fileName, fileBuffer, {
             contentType: file.type,

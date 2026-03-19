@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase
       .storage
-      .schema('docs')
       .from('documents')
       .upload(filePath, fileBuffer, {
         contentType: file.type,

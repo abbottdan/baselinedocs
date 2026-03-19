@@ -296,7 +296,6 @@ export async function createDocument(formData: FormData) {
 
           // Upload to storage
           const { error: uploadError } = await supabase.storage
-            .schema('docs')
             .from('documents')
             .upload(filePath, file)
 
@@ -571,7 +570,6 @@ export async function updateDocument(
           const filePath = `${subdomain}/${document.document_number}${document.version}/${fileName}`
 
           const { error: uploadError } = await supabase.storage
-            .schema('docs')
             .from('documents')
             .upload(filePath, file)
 
@@ -833,7 +831,6 @@ export async function deleteDocument(
       })
 
       const { error: storageError } = await supabase.storage
-        .schema('docs')
         .from('documents')
         .remove(filePaths)
 
@@ -984,7 +981,6 @@ export async function deleteFile(documentId: string, fileId: string) {
 
     // Delete from storage
     const { error: storageError } = await supabase.storage
-      .schema('docs')
       .from('documents')
       .remove([file.file_path])
 
