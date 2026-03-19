@@ -204,6 +204,14 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
       return { success: false, error: 'User is already the owner' }
     }
 
+    // Fetch old owner email from shared.users using created_by UUID
+    const { data: oldOwner } = await createSharedClient()
+      .schema('shared')
+      .from('users')
+      .select('email')
+      .eq('id', document.created_by)
+      .single()
+
     // Use service role client to bypass RLS
     const supabaseAdmin = createServiceRoleClient()
 
@@ -231,7 +239,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
         tenant_id: document.tenant_id,
         details: {
           document_number: `${document.document_number}${document.version}`,
-          old_owner: (document.users as any)?.email || 'unknown',
+          old_owner: oldOwner?.email || 'unknown',
           new_owner: newOwner.email,
         },
       })
