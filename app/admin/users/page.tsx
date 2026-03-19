@@ -3,7 +3,7 @@
  * CHANGED: Admin check via shared.users.is_master_admin + docs.user_roles
  */
 import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
-import { redirect } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import UserManagementTable from './UserManagementTable'
 import UserLimitBanner from '@/components/admin/UserLimitBanner'
