@@ -1,4 +1,5 @@
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createSharedClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -2,6 +2,7 @@
 
 import { Resend } from 'resend'
 import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 
