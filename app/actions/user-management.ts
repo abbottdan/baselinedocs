@@ -215,7 +215,7 @@ export async function updateUserRole(
     const { data: targetUser, error: targetError } = await supabaseAdmin
       .schema('shared')
       .from('users')
-      .select('email, full_name, role')
+      .select('email, full_name')
       .eq('id', targetUserId)
       .single()
 
@@ -234,7 +234,7 @@ export async function updateUserRole(
       adminEmail: userEmail,
       targetUserId,
       targetEmail: targetUser.email,
-      oldRole: targetUser.role,
+      oldRole: null, // fetched separately from docs.user_roles if needed
       newRole: data.role,
       reason: data.reason
     })
