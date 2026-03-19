@@ -64,7 +64,7 @@ export async function createDocumentType(data: { name: string; prefix: string; d
       }
       const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
-    if (adminCheckError || !userData?.is_admin) {
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted document type creation', { 
         userId, 
         userEmail,
@@ -284,7 +284,7 @@ export async function updateDocumentType(id: string, data: { name: string; descr
       }
       const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
-    if (adminCheckError || !userData?.is_admin) {
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted document type update', { 
         userId, 
         userEmail,
@@ -465,7 +465,7 @@ export async function deleteDocumentType(id: string) {
       }
       const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
-    if (adminCheckError || !userData?.is_admin) {
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted document type deletion', { 
         userId,
         userEmail,
@@ -624,7 +624,7 @@ export async function toggleDocumentTypeStatus(id: string) {
       }
       const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
-    if (adminCheckError || !userData?.is_admin) {
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted status toggle', { 
         userId,
         userEmail,
@@ -844,7 +844,7 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
       }
       const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
-    if (adminCheckError || !userData?.is_admin) {
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted counter reset', { 
         userId, 
         userEmail,
