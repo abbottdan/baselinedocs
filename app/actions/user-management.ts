@@ -110,6 +110,24 @@ export async function getAllUsers() {
       throw fetchError
     }
 
+    // Batch fetch roles from docs.user_roles for all users in this tenant
+    const { data: roleRows } = await supabase
+      .schema('docs')
+      .from('user_roles')
+      .select('user_id, role')
+      .eq('tenant_id', targetTenantId)
+    const roleMap: Record<string, string> = Object.fromEntries(
+      (roleRows || []).map(r => [r.user_id, r.role])
+    )
+
+    // Map DB roles to UI roles
+    const DB_ROLE_TO_UI: Record<string, UserRole> = {
+      master_admin:  'Admin',
+      tenant_admin:  'Admin',
+      user:          'Normal',
+      readonly:      'Read Only',
+    }
+
     // Get document counts for each user
     const usersWithStats = await Promise.all(
       (users || []).map(async (u) => {
@@ -123,10 +141,15 @@ export async function getAllUsers() {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', u.id)
 
+        const dbRole = u.is_master_admin ? 'master_admin' : (roleMap[u.id] ?? 'user')
+        const uiRole: UserRole = DB_ROLE_TO_UI[dbRole] ?? 'Normal'
+
         return {
           ...u,
+          is_admin: u.is_master_admin || ['tenant_admin', 'master_admin'].includes(dbRole),
+          role: uiRole,
           document_count: docCount || 0,
-          approval_count: approvalCount || 0
+          approval_count: approvalCount || 0,
         }
       })
     )
