@@ -25,7 +25,7 @@ export default async function BillingPage() {
   const { data: tenantData } = await createPlatformClient()
       .schema('platform')
       .from('tenants')
-      .select('id, company_name, subdomain, created_at')
+      .select('id, company_name, subdomain, created_at, stripe_customer_id')
       .eq('id', tenantId)
       .single()
 
@@ -62,8 +62,8 @@ export default async function BillingPage() {
 
   // Get invoices - sync from Stripe first to backfill any missing
   let invoices = []
-  if (billing?.stripe_customer_id) {
-    invoices = await syncInvoicesFromStripe(tenantData.id, billing.stripe_customer_id)
+  if (tenantData?.stripe_customer_id) {
+    invoices = await syncInvoicesFromStripe(tenantData.id, tenantData.stripe_customer_id)
   } else {
     // Fallback to database only if no Stripe customer
     const { data: dbInvoices } = await createPlatformClient()
