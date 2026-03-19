@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { stripe } from '@/lib/stripe/client'
 
@@ -93,14 +93,13 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Send reminder email (simulating 5-day advance notice)
     // Use service role client to bypass RLS
-    const { createServiceRoleClient } = await import('@/lib/supabase/server')
     const supabaseAdmin = createServiceRoleClient()
     
     // First try to find admin by is_admin flag
     const { data: adminUsers } = await supabaseAdmin
       .schema('shared')
       .from('users')
-      .select('email, role, is_admin')
+      .select('email, is_master_admin')
       .eq('tenant_id', tenant.id)
       .eq('is_master_admin', true)
       .limit(1)
@@ -120,8 +119,6 @@ export async function POST(request: NextRequest) {
     console.log('[Test Billing] Admin user lookup:', { 
       found: !!adminUser, 
       email: adminUser?.email,
-      role: adminUser?.role,
-      is_master_admin: adminUser?.is_master_admin,
       tenant_id: tenant.id,
       adminUsersCount: adminUsers?.length || 0,
       adminByRoleCount: adminByRole?.length || 0

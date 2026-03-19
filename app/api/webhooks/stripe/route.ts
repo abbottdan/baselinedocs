@@ -8,7 +8,7 @@ import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { createPlatformClient } from '@/lib/supabase/platform'
-import { createSharedClient } from '@/lib/supabase/server'
+import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM_BILLING_EMAIL = process.env.FROM_BILLING_EMAIL || 'billing@baselinedocs.com'
@@ -507,7 +507,6 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 
 async function sendPaymentConfirmation(tenantId: string, invoice: Stripe.Invoice) {
   const { sendPaymentConfirmationEmail } = await import('@/lib/billing-emails')
-  const { createServiceRoleClient } = await import('@/lib/supabase/server')
   const adminClient = createServiceRoleClient()
 
   const { data: tenant } = await createPlatformClient()

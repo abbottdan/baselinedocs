@@ -104,7 +104,6 @@ export async function GET(request: NextRequest) {
     ])]
     let userEmailMap: Record<string, string> = {}
     if (userIds.length > 0) {
-      const { createSharedClient } = await import('@/lib/supabase/server')
       const { data: userRows } = await createSharedClient()
         .schema('shared')
         .from('users')

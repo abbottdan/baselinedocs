@@ -1,5 +1,5 @@
 import { inngest } from '../client'
-import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { stripe } from '@/lib/stripe/client'
 import { Resend } from 'resend'
@@ -123,7 +123,6 @@ export const sendInvoiceReminders = inngest.createFunction(
 
           // Get admin email
           // Fetch tenant admin email from shared.users
-    const { createSharedClient } = await import('@/lib/supabase/server')
     const { data: adminUsers } = await createSharedClient()
       .schema('shared')
       .from('users')
