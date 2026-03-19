@@ -179,6 +179,9 @@ export async function updateUserRole(
   const supabaseAdmin = createServiceRoleClient()
 
   try {
+    // Get subdomain tenant context
+    const targetTenantId = await getSubdomainTenantId()
+    if (!targetTenantId) return { success: false, error: 'Invalid tenant context' }
     // Validate UUID
     const { success: uuidValid } = uuidSchema.safeParse(targetUserId)
     if (!uuidValid) {
@@ -202,20 +205,8 @@ export async function updateUserRole(
     const userEmail = user.email
 
     // Check admin status
-    const { data: userData, error: adminCheckError } = await supabase
-      .schema('shared')
-      .from('users')
-      .select('is_master_admin, tenant_id')
-      .eq('id', userId)
-      .single()
-
-    let _isAdminCheck = userData?.is_master_admin ?? false
-    if (userData && !userData.is_master_admin) {
-      const { data: _rr } = await supabase.schema('docs').from('user_roles')
-        .select('role').eq('user_id', userId).eq('tenant_id', userData.tenant_id).single()
-      _isAdminCheck = ['tenant_admin', 'master_admin'].includes(_rr?.role ?? '')
-    }
-    if (adminCheckError || !_isAdminCheck) {
+    const { isAdmin: _isAdminCheck, error: _adminRoleErr } = await requireAdmin(userId, supabase)
+    if (!_isAdminCheck) {
       logger.warn('Non-admin attempted to change user role', { userId, userEmail })
       return { success: false, error: 'Only administrators can change user roles' }
     }
@@ -248,15 +239,40 @@ export async function updateUserRole(
       reason: data.reason
     })
 
-    // Update role
+    // Update role in docs.user_roles (shared.users has no role column)
+    // Map UI role to DB role
+    const dbRoleMap: Record<string, string> = {
+      'Admin':      'tenant_admin',
+      'Normal':     'user',
+      'Read Only':  'readonly',
+      'Deactivated': 'user',
+    }
+    const newDbRole = dbRoleMap[data.role] ?? 'user'
+
     const { error: updateError } = await supabaseAdmin
-      .schema('shared')
-      .from('users')
-      .update({
-        role: data.role,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', targetUserId)
+      .schema('docs')
+      .from('user_roles')
+      .upsert({
+        user_id: targetUserId,
+        tenant_id: targetTenantId,
+        role: newDbRole,
+      }, { onConflict: 'user_id,tenant_id' })
+
+    // If deactivating, also set is_active=false on shared.users
+    if (data.role === 'Deactivated') {
+      await supabaseAdmin
+        .schema('shared')
+        .from('users')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', targetUserId)
+    } else {
+      // Ensure user is active
+      await supabaseAdmin
+        .schema('shared')
+        .from('users')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', targetUserId)
+    }
 
     if (updateError) {
       logger.error('Failed to update user role', {
@@ -563,8 +579,7 @@ export async function addUser(data: {
       authUserId = authUser.user.id
     }
 
-    // Create user record in public.users table
-    // Use service role client to bypass RLS policies
+    // Create user record in shared.users (no role/is_admin columns there)
     const { error: insertError } = await supabaseAdmin
       .schema('shared')
       .from('users')
@@ -573,14 +588,12 @@ export async function addUser(data: {
         email: validation.data.email.toLowerCase(),
         full_name: `${validation.data.firstName} ${validation.data.lastName}`,
         tenant_id: targetTenantId,
-        role: validation.data.role,
-        is_admin: validation.data.role === 'Admin',
+        is_master_admin: false,
         is_active: validation.data.role !== 'Deactivated'
       })
 
     if (insertError) {
       logger.error('Failed to create user record', { error: insertError })
-      // Only try to delete auth user if we just created it (not reusing existing)
       if (!existingAuthUser) {
         await supabaseAdmin.auth.admin.deleteUser(authUserId)
       }
@@ -590,8 +603,24 @@ export async function addUser(data: {
       }
     }
 
+    // Write role to docs.user_roles (separate from shared.users)
+    const dbRole = validation.data.role === 'Admin' ? 'tenant_admin'
+      : validation.data.role === 'Read Only' ? 'readonly'
+      : validation.data.role === 'Deactivated' ? 'user'
+      : 'user'
+
+    await supabaseAdmin
+      .schema('docs')
+      .from('user_roles')
+      .upsert({
+        user_id: authUserId,
+        tenant_id: targetTenantId,
+        role: dbRole,
+      }, { onConflict: 'user_id,tenant_id' })
+
     // Get tenant info for welcome email
-    const { data: tenantData } = await supabase
+    const { data: tenantData } = await createPlatformClient()
+      .schema('platform')
       .from('tenants')
       .select('id, subdomain, company_name')
       .eq('id', targetTenantId)
