@@ -122,7 +122,9 @@ export async function createDocumentType(data: { name: string; prefix: string; d
     })
 
     // Check for duplicate prefix within this tenant
-    const { data: existingType, error: checkError } = await supabase
+    const srCheck = createServiceRoleClient()
+    const { data: existingType, error: checkError } = await srCheck
+      .schema('docs')
       .from('document_types')
       .select('id, prefix')
       .eq('prefix', sanitizedData.prefix)
@@ -319,7 +321,9 @@ export async function updateDocumentType(id: string, data: { name: string; descr
     })
 
     // Get current document type to check for documents
-    const { data: currentType, error: fetchError } = await supabase
+    const srFetch = createServiceRoleClient()
+    const { data: currentType, error: fetchError } = await srFetch
+      .schema('docs')
       .from('document_types')
       .select('prefix, name')
       .eq('id', id)
@@ -483,7 +487,9 @@ export async function deleteDocumentType(id: string) {
     }
 
     // Get document type info before deletion for logging
-    const { data: typeToDelete } = await supabase
+    const srFetch2 = createServiceRoleClient()
+    const { data: typeToDelete } = await srFetch2
+      .schema('docs')
       .from('document_types')
       .select('name, prefix')
       .eq('id', id)
@@ -597,7 +603,9 @@ export async function toggleDocumentTypeStatus(id: string) {
     }
 
     // Get current document type info
-    const { data: currentType } = await supabase
+    const srFetch3 = createServiceRoleClient()
+    const { data: currentType } = await srFetch3
+      .schema('docs')
       .from('document_types')
       .select('name, prefix, is_active')
       .eq('id', id)
@@ -691,7 +699,9 @@ export async function getDocumentType(id: string) {
   const supabase = await createClient()
   
   try {
-    const { data, error } = await supabase
+    const srGet = createServiceRoleClient()
+    const { data, error } = await srGet
+      .schema('docs')
       .from('document_types')
       .select('*')
       .eq('id', id)
@@ -728,10 +738,13 @@ export async function getDocumentTypes(activeOnly: boolean = true) {
       return { success: false, error: { message: 'Invalid tenant context' }, data: [] }
     }
 
-    let query = supabase
+    // Use service role to bypass RLS — tenantId filter is the access control
+    const srList = createServiceRoleClient()
+    let query = srList
+      .schema('docs')
       .from('document_types')
       .select('*')
-      .eq('tenant_id', tenantId)  // ✅ Filter by subdomain's tenant
+      .eq('tenant_id', tenantId)
       .order('name')
     
     // Filter by active status if requested
@@ -817,7 +830,9 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
     }
 
     // Get document type to verify ownership
-    const { data: docType, error: docTypeError } = await supabase
+    const srOwner = createServiceRoleClient()
+    const { data: docType, error: docTypeError } = await srOwner
+      .schema('docs')
       .from('document_types')
       .select('id, name, prefix, tenant_id')
       .eq('id', documentTypeId)
