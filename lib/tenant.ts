@@ -151,7 +151,7 @@ export async function getCurrentSubdomain(): Promise<string> {
  */
 export async function getSubdomainTenantId(): Promise<string | null> {
   const subdomain = await getCurrentSubdomain()
-  if (!subdomain || subdomain === 'app') return null
+  //if (!subdomain || subdomain === 'app') return null
   return getTenantIdBySubdomain(subdomain)
 }
 
