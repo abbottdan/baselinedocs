@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 
 /**
@@ -19,11 +19,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Admin check
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared')
+        .from('users')
+        .select('is_master_admin, tenant_id, email, full_name')
+        .eq('id', user.id)
+        .single()
+      const userData = {
+        is_admin: _su?.is_master_admin ?? false,
+        tenant_id: _su?.tenant_id,
+        email: _su?.email,
+        full_name: _su?.full_name,
+      }
 
     if (!userData?.is_admin) {
       return NextResponse.json({ error: 'Admin only' }, { status: 403 })
@@ -50,8 +58,8 @@ export async function GET(request: NextRequest) {
         updated_at,
         released_at,
         document_types!inner ( name, prefix ),
-        created_by_user:users!documents_created_by_fkey ( email ),
-        released_by_user:users!documents_released_by_fkey ( email )
+        created_by,
+        released_by
       `)
       .eq('tenant_id', tenantId)
       .order('document_number', { ascending: true })

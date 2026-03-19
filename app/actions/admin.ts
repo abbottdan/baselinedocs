@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getCurrentSubdomain } from '@/lib/tenant'
 import { checkBaselineReqsReferences, markBaselineReqsLinksBroken, type BaselineReqsLinksResult } from '@/lib/integrations/baselinereqs'
@@ -28,11 +28,20 @@ export async function adminDeleteDocument(
     }
 
     // Check if user is admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+          const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id).single()
+      let _isAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase
+          .schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id)
+          .eq('tenant_id', _su.tenant_id).single()
+        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
     if (!userData?.is_admin) {
       return { success: false, error: 'Not authorized - admin only' }
@@ -148,11 +157,20 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
     }
 
     // Check if user is admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+          const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id).single()
+      let _isAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase
+          .schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id)
+          .eq('tenant_id', _su.tenant_id).single()
+        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
     if (!userData?.is_admin) {
       return { success: false, error: 'Not authorized - admin only' }
@@ -160,6 +178,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
 
     // Get new owner by email
     const { data: newOwner, error: ownerError } = await supabase
+      .schema('shared')
       .from('users')
       .select('id, email')
       .eq('email', newOwnerEmail.toLowerCase())
@@ -172,7 +191,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
     // Get current document info
     const { data: document, error: docError } = await supabase
       .from('documents')
-      .select('id, document_number, version, created_by, tenant_id, users!documents_created_by_fkey(email)')
+      .select('id, document_number, version, created_by, tenant_id')
       .eq('id', documentId)
       .single()
 
@@ -244,11 +263,20 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
     }
 
     // Check if user is admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+          const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id).single()
+      let _isAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase
+          .schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id)
+          .eq('tenant_id', _su.tenant_id).single()
+        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _isAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
     if (!userData?.is_admin) {
       return { success: false, error: 'Not authorized - admin only' }

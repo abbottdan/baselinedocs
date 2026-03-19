@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient , createSharedClient} from '@/lib/supabase/server';
 import DocumentTypeForm from '@/components/document-types/DocumentTypeForm';
 
 export default async function NewDocumentTypePage() {
@@ -12,11 +12,27 @@ export default async function NewDocumentTypePage() {
   }
 
   // Check admin access
-  const { data: userData } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
+  const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('is_master_admin, tenant_id, is_active')
+      .eq('id', user.id)
+      .single()
+    // Derive is_admin for backwards compat
+    let _roleRow: any = null
+    if (sharedUser && !sharedUser.is_master_admin) {
+      const { data: rr } = await supabase
+        .schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id)
+        .eq('tenant_id', sharedUser.tenant_id).single()
+      _roleRow = rr
+    }
+    const userData = {
+      is_admin: sharedUser?.is_master_admin || ['tenant_admin','master_admin'].includes(_roleRow?.role ?? ''),
+      is_master_admin: sharedUser?.is_master_admin ?? false,
+      tenant_id: sharedUser?.tenant_id,
+    };
 
   if (!userData?.is_admin) {
     redirect('/dashboard');

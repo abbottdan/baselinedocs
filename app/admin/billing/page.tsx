@@ -1,4 +1,5 @@
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { redirect } from 'next/navigation'
 import BillingPageClient from './BillingPageClient'
 import { syncInvoicesFromStripe } from './sync-invoices'
@@ -21,33 +22,43 @@ export default async function BillingPage() {
 
 
   // Get tenant ID from subdomain
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('id, company_name, subdomain, created_at')
-    .eq('id', tenantId)
-    .single()
+  const { data: tenantData } = await createPlatformClient()
+      .schema('platform')
+      .from('tenants')
+      .select('id, company_name, subdomain, created_at')
+      .eq('id', tenantId)
+      .single()
 
   if (!tenantData) {
     redirect('/dashboard')
   }
 
   // Check admin status
-  const { data: userData } = await supabase
-    .from('users')
-    .select('is_admin, role')
-    .eq('id', user.id)
-    .single()
+  const sharedClient = createSharedClient()
+    const { data: _su } = await sharedClient
+      .schema('shared').from('users')
+      .select('is_master_admin, tenant_id')
+      .eq('id', user.id).single()
+    let _isAdmin = _su?.is_master_admin ?? false
+    if (_su && !_su.is_master_admin) {
+      const { data: rr } = await supabase.schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id).eq('tenant_id', _su.tenant_id).single()
+      _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+    }
+    const userData = { is_admin: _isAdmin }
 
   if (!userData?.is_admin) {
     redirect('/dashboard')
   }
 
   // Get billing information
-  const { data: billing } = await supabase
-    .from('tenant_billing')
-    .select('*')
-    .eq('tenant_id', tenantData.id)
-    .single()
+  const { data: billing } = await createPlatformClient()
+      .schema('platform')
+      .from('product_subscriptions')
+      .select('plan, status, stripe_customer_id, stripe_subscription_id, user_limit, next_billing_date')
+      .eq('tenant_id', tenantData.id)
+      .eq('product', 'baselinedocs')
+      .single()
 
   // Get invoices - sync from Stripe first to backfill any missing
   let invoices = []
@@ -55,8 +66,9 @@ export default async function BillingPage() {
     invoices = await syncInvoicesFromStripe(tenantData.id, billing.stripe_customer_id)
   } else {
     // Fallback to database only if no Stripe customer
-    const { data: dbInvoices } = await supabase
-      .from('invoices')
+    const { data: dbInvoices } = await createPlatformClient()
+        .schema('platform')
+        .from('invoices')
       .select('*')
       .eq('tenant_id', tenantData.id)
       .order('invoice_date', { ascending: false })
@@ -91,6 +103,7 @@ export default async function BillingPage() {
 
   // Get user count (use admin client to bypass RLS)
   const { count: userCount } = await supabaseAdmin
+    .schema('shared')
     .from('users')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantData.id)

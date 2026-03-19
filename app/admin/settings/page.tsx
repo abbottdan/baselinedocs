@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { redirect } from 'next/navigation'
 import CompanySettingsForm from './CompanySettingsForm'
 import { getCurrentSubdomain } from '@/lib/tenant'
@@ -12,20 +13,37 @@ export default async function CompanySettingsPage() {
     redirect('/')
   }
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, is_admin, is_master_admin')
-    .eq('id', user.id)
-    .single()
+  const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('is_master_admin, tenant_id, is_active')
+      .eq('id', user.id)
+      .single()
+    // Derive is_admin for backwards compat
+    let _roleRow: any = null
+    if (sharedUser && !sharedUser.is_master_admin) {
+      const { data: rr } = await supabase
+        .schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id)
+        .eq('tenant_id', sharedUser.tenant_id).single()
+      _roleRow = rr
+    }
+    const userData = {
+      is_admin: sharedUser?.is_master_admin || ['tenant_admin','master_admin'].includes(_roleRow?.role ?? ''),
+      is_master_admin: sharedUser?.is_master_admin ?? false,
+      tenant_id: sharedUser?.tenant_id,
+    }
 
-  if (!userData?.is_admin && !userData?.is_master_admin) {
+  if (!userData?.is_admin) {
     redirect('/dashboard')
   }
 
   const currentSubdomain = await getCurrentSubdomain()
 
-  const { data: tenant } = await supabase
-    .from('tenants')
+  const { data: tenant } = await createPlatformClient()
+      .schema('platform')
+      .from('tenants')
     .select('id, company_name, subdomain, logo_url, auto_rename_files, timezone')
     .eq('subdomain', currentSubdomain)
     .single()

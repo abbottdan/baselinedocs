@@ -10,7 +10,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { stripe } from '@/lib/stripe/client'
 
 export async function GET() {
@@ -35,11 +36,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_master_admin')
-      .eq('id', user.id)
-      .single()
+    const { data: userData } = await createSharedClient()
+        .schema('shared')
+        .from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id)
+        .single()
 
     if (!userData?.is_master_admin) {
       return NextResponse.json({ error: 'Master admin access required' }, { status: 403 })
@@ -54,8 +56,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get tenant
-    const { data: tenant } = await supabase
-      .from('tenants')
+    const { data: tenant } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .select('id, subdomain, company_name')
       .eq('subdomain', tenantSubdomain)
       .single()
@@ -65,8 +68,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get billing info
-    const { data: billing } = await supabase
-      .from('tenant_billing')
+    const { data: billing } = await createPlatformClient()
+        .schema('platform')
+        .from('product_subscriptions')
       .select('*')
       .eq('tenant_id', tenant.id)
       .single()
@@ -94,19 +98,22 @@ export async function POST(request: NextRequest) {
     
     // First try to find admin by is_admin flag
     const { data: adminUsers } = await supabaseAdmin
+      .schema('shared')
       .from('users')
       .select('email, role, is_admin')
       .eq('tenant_id', tenant.id)
-      .eq('is_admin', true)
+      .eq('is_master_admin', true)
       .limit(1)
 
     // Fallback: find by role='Admin'
-    const { data: adminByRole } = !adminUsers?.length ? await supabaseAdmin
-      .from('users')
-      .select('email, role, is_admin')
-      .eq('tenant_id', tenant.id)
-      .eq('role', 'Admin')
-      .limit(1) : { data: null }
+    const { data: adminByRole } = !adminUsers?.length ? await createSharedClient()
+        .schema('shared')
+        .from('users')
+        .select('email')
+        .eq('tenant_id', tenant.id)
+        .eq('is_master_admin', false)
+        .eq('is_active', true)
+        .limit(1) : { data: null }
 
     const adminUser = adminUsers?.[0] || adminByRole?.[0]
 
@@ -114,7 +121,7 @@ export async function POST(request: NextRequest) {
       found: !!adminUser, 
       email: adminUser?.email,
       role: adminUser?.role,
-      is_admin: adminUser?.is_admin,
+      is_master_admin: adminUser?.is_master_admin,
       tenant_id: tenant.id,
       adminUsersCount: adminUsers?.length || 0,
       adminByRoleCount: adminByRole?.length || 0

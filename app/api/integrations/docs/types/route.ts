@@ -46,8 +46,9 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient()
 
   // ── Resolve tenant ────────────────────────────────────────────────────────
-  const { data: tenant, error: tenantError } = await supabase
-    .from('tenants')
+  const { data: tenant, error: tenantError } = await createPlatformClient()
+      .schema('platform')
+      .schema('platform').from('tenants')
     .select('id')
     .eq('subdomain', subdomain)
     .single()

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,11 +16,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin, email')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared')
+        .from('users')
+        .select('is_master_admin, tenant_id, email, full_name')
+        .eq('id', user.id)
+        .single()
+      const userData = {
+        is_admin: _su?.is_master_admin ?? false,
+        tenant_id: _su?.tenant_id,
+        email: _su?.email,
+        full_name: _su?.full_name,
+      }
 
     if (!userData?.is_admin) {
       return NextResponse.json(

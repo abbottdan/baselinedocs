@@ -1,7 +1,7 @@
 // app/actions/company-settings.ts
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -27,11 +27,18 @@ export async function uploadCompanyLogo(formData: FormData) {
       return { success: false, error: 'You must be logged in' }
     }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id).single()
+      let _isAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase.schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id).eq('tenant_id', _su.tenant_id).single()
+        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _isAdmin }
 
     if (!userData?.is_admin) {
       return { success: false, error: 'Only administrators can upload logos' }
@@ -63,8 +70,9 @@ export async function uploadCompanyLogo(formData: FormData) {
       return { success: false, error: 'File size must be less than 5MB' }
     }
 
-    const { data: tenant } = await supabase
-      .from('tenants')
+    const { data: tenant } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .select('subdomain')
       .eq('id', tenantId)
       .single()
@@ -93,8 +101,9 @@ export async function uploadCompanyLogo(formData: FormData) {
       .from('company-logos')
       .getPublicUrl(filePath)
 
-    const { error: updateError } = await supabase
-      .from('tenants')
+    const { error: updateError } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .update({ 
         logo_url: publicUrl,
         updated_at: new Date().toISOString()
@@ -155,18 +164,26 @@ export async function updateCompanySettings(data: {
       }
     }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id')
+        .eq('id', user.id).single()
+      let _isAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase.schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id).eq('tenant_id', _su.tenant_id).single()
+        _isAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _isAdmin }
 
     if (!userData?.is_admin) {
       return { success: false, error: 'Only administrators can update company settings' }
     }
 
-    const { error: updateError } = await supabase
-      .from('tenants')
+    const { error: updateError } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .update({
         company_name: validation.data.company_name,
         logo_url: validation.data.logo_url,
@@ -213,6 +230,7 @@ export async function getCompanySettings() {
     }
 
     const { data: userData } = await supabase
+      .schema('shared')
       .from('users')
       .select('tenant_id')
       .eq('id', user.id)
@@ -222,8 +240,9 @@ export async function getCompanySettings() {
       return { success: false, error: 'User not found', data: null }
     }
 
-    const { data: tenant, error } = await supabase
-      .from('tenants')
+    const { data: tenant, error } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .select('*')
       .eq('id', userData.tenant_id)
       .single()

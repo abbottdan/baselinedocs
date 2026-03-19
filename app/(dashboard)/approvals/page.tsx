@@ -27,9 +27,7 @@ export default async function MyApprovalsPage() {
         is_production,
         created_at,
         project_code,
-        creator:users!documents_created_by_fkey (
-          email
-        ),
+        created_by,
         document_type:document_types (
           name,
           prefix

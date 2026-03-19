@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { logger } from '@/lib/logger'
@@ -221,11 +222,12 @@ export async function upgradeTenantPlan(data: {
     }
 
     // Fetch full tenant data (including company_name)
-    const { data: tenantData } = await supabase
-      .from('tenants')
-      .select('id, subdomain, company_name')
-      .eq('id', subdomainTenantId)
-      .single()
+    const { data: tenantData } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
+        .select('id, subdomain, company_name')
+        .eq('id', subdomainTenantId)
+        .single()
 
     if (!tenantData) {
       logger.error('🔴 [Billing] Failed to fetch tenant data', { subdomainTenantId })
@@ -240,11 +242,18 @@ export async function upgradeTenantPlan(data: {
     // Continue using tenantData.company_name...
 
     // Check admin status
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin, tenant_id, email')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: _su } = await sharedClient
+        .schema('shared').from('users')
+        .select('is_master_admin, tenant_id, email')
+        .eq('id', user.id).single()
+      let _billingIsAdmin = _su?.is_master_admin ?? false
+      if (_su && !_su.is_master_admin) {
+        const { data: rr } = await supabase.schema('docs').from('user_roles')
+          .select('role').eq('user_id', user.id).eq('tenant_id', _su.tenant_id).single()
+        _billingIsAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+      }
+      const userData = { is_admin: _billingIsAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
 
     if (!userData?.is_admin || userData.tenant_id !== data.tenantId) {
       logger.error('🔴 [Billing] Permission denied', {
@@ -258,11 +267,13 @@ export async function upgradeTenantPlan(data: {
     logger.info('🟢 [Billing] Admin permissions verified')
 
     // Get current billing info
-    const { data: currentBilling } = await supabase
-      .from('tenant_billing')
-      .select('*')
-      .eq('tenant_id', data.tenantId)
-      .single()
+    const { data: currentBilling } = await createPlatformClient()
+        .schema('platform')
+        .from('product_subscriptions')
+        .select('plan, status, stripe_customer_id, stripe_subscription_id')
+        .eq('tenant_id', data.tenantId)
+        .eq('product', 'baselinedocs')
+        .single()
 
     logger.info('🟢 [Billing] Current billing retrieved', {
       currentPlan: currentBilling?.plan,
@@ -330,10 +341,12 @@ export async function upgradeTenantPlan(data: {
           status: subscription.status
         })
         // Clear the cancelled subscription ID from database so we create a fresh one
-        await supabase
-          .from('tenant_billing')
-          .update({ stripe_subscription_id: null })
-          .eq('tenant_id', data.tenantId)
+        await createPlatformClient()
+            .schema('platform')
+            .from('product_subscriptions')
+            .update({ stripe_subscription_id: null })
+            .eq('tenant_id', data.tenantId)
+            .eq('product', 'baselinedocs')
         // Fall through to checkout session creation below
       } else {
         logger.info('🔵 [Billing] Updating active subscription...', {
@@ -359,14 +372,16 @@ export async function upgradeTenantPlan(data: {
         })
 
         // Update billing record
-        await supabase
-          .from('tenant_billing')
-          .update({
+        await createPlatformClient()
+            .schema('platform')
+            .from('product_subscriptions')
+            .update({
             plan: data.newPlan,
             stripe_price_id: priceId,
             updated_at: new Date().toISOString(),
           })
-          .eq('tenant_id', data.tenantId)
+            .eq('tenant_id', data.tenantId)
+            .eq('product', 'baselinedocs')
 
         logger.info('🟢 [Billing] Database updated')
 
@@ -482,26 +497,18 @@ export async function upgradeTenantPlan(data: {
       })
 
       // Update billing record immediately
-      const { data: existingBilling } = await supabase
-        .from('tenant_billing')
-        .select('id')
-        .eq('tenant_id', data.tenantId)
-        .single()
-
-      const billingData = {
+      await createPlatformClient()
+      .schema('platform')
+      .from('product_subscriptions')
+      .upsert({
         tenant_id: data.tenantId,
+        product: 'baselinedocs',
         stripe_customer_id: customerId,
         stripe_subscription_id: newSubscription.id,
         plan: data.newPlan,
         status: newSubscription.status,
         updated_at: new Date().toISOString(),
-      }
-
-      if (existingBilling) {
-        await supabase.from('tenant_billing').update(billingData).eq('tenant_id', data.tenantId)
-      } else {
-        await supabase.from('tenant_billing').insert(billingData)
-      }
+      }, { onConflict: 'tenant_id,product' })
 
       logger.info('🟢 [Billing] Database updated after direct subscription creation')
 
@@ -554,13 +561,15 @@ export async function upgradeTenantPlan(data: {
     })
 
     // Update customer ID in database
-    await supabase
-      .from('tenant_billing')
-      .update({
+    await createPlatformClient()
+        .schema('platform')
+        .from('product_subscriptions')
+        .update({
         stripe_customer_id: customerId,
         updated_at: new Date().toISOString(),
       })
-      .eq('tenant_id', data.tenantId)
+        .eq('tenant_id', data.tenantId)
+        .eq('product', 'baselinedocs')
 
     logger.info('🟢 [Billing] Customer ID saved to database')
 

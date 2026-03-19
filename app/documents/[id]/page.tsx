@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { fetchDocumentVersions } from '@/lib/document-helpers'
 import { getSubdomainTenantId, getCurrentSubdomain } from '@/lib/tenant'
@@ -24,11 +24,27 @@ export default async function DocumentDetailPage({ params }: PageProps) {
   }
 
   // Check if user is admin
-  const { data: userData } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
+  const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('is_master_admin, tenant_id, is_active')
+      .eq('id', user.id)
+      .single()
+    // Derive is_admin for backwards compat
+    let _roleRow: any = null
+    if (sharedUser && !sharedUser.is_master_admin) {
+      const { data: rr } = await supabase
+        .schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id)
+        .eq('tenant_id', sharedUser.tenant_id).single()
+      _roleRow = rr
+    }
+    const userData = {
+      is_admin: sharedUser?.is_master_admin || ['tenant_admin','master_admin'].includes(_roleRow?.role ?? ''),
+      is_master_admin: sharedUser?.is_master_admin ?? false,
+      tenant_id: sharedUser?.tenant_id,
+    }
 
   if (!userData) {
     redirect('/auth/login')
@@ -68,12 +84,13 @@ export default async function DocumentDetailPage({ params }: PageProps) {
   }
 
   // Get available users for approver assignment (if admin or creator)
-  const { data: availableUsers } = await supabase
-    .from('users')
-    .select('id, email, full_name')
-    .eq('tenant_id', subdomainTenantId)
-    .eq('is_active', true)
-    .order('full_name')
+  const { data: availableUsers } = await createSharedClient()
+      .schema('shared')
+      .from('users')
+      .select('id, email, full_name')
+      .eq('tenant_id', subdomainTenantId)
+      .eq('is_active', true)
+      .order('full_name')
 
   // Fetch audit logs for ALL versions of this document (cross-version history)
   const { data: auditLogs, error: auditError } = await supabase

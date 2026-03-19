@@ -1,5 +1,6 @@
 import { inngest } from '../client'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { stripe } from '@/lib/stripe/client'
 import { Resend } from 'resend'
 
@@ -33,8 +34,8 @@ export const sendInvoiceReminders = inngest.createFunction(
     const activeSubscriptions = await step.run('get-active-subscriptions', async () => {
       const supabase = createServiceRoleClient()
       
-      const { data: tenants, error } = await supabase
-        .from('tenant_billing')
+      const { data: tenants, error } = await createPlatformClient()
+          .schema('platform').from('product_subscriptions')
         .select(`
           tenant_id,
           stripe_customer_id,

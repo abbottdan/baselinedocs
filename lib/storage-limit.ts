@@ -4,6 +4,7 @@
  */
 
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 
 interface StorageLimitCheck {
   allowed: boolean
@@ -22,11 +23,13 @@ export async function checkStorageLimit(
   const supabaseAdmin = createServiceRoleClient()
 
   // Get tenant's storage limit
-  const { data: billingData } = await supabase
-    .from('tenant_billing')
-    .select('plan, storage_limit_gb')
-    .eq('tenant_id', tenantId)
-    .single()
+  const { data: billingData } = await createPlatformClient()
+      .schema('platform')
+      .from('product_subscriptions')
+      .select('user_limit, plan, status')
+      .eq('tenant_id', tenantId)
+      .eq('product', 'baselinedocs')
+      .single()
 
   if (!billingData || !billingData.storage_limit_gb) {
     return {

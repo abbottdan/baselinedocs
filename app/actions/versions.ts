@@ -538,7 +538,7 @@ export async function getVersionHistory(documentNumber: string) {
       .from('documents')
       .select(`
         *,
-        users!documents_created_by_fkey(email),
+        created_by,
         document_types(name, prefix)
       `)
       .eq('document_number', documentNumber)

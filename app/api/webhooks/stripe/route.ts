@@ -214,7 +214,7 @@ function buildPaymentConfirmationEmail(params: {
 }
 
 async function getTenantId(customerId: string) {
-  const { data } = await supabase.from('tenant_billing').select('tenant_id').eq('stripe_customer_id', customerId).single()
+  const { data } = await createPlatformClient().schema('platform').from('product_subscriptions').select('tenant_id').eq('stripe_customer_id', customerId).eq('product', 'baselinedocs').single()
   if (!data) { console.error('🔴 [Webhook] No tenant found for customer:', customerId); throw new Error(`No tenant for customer ${customerId}`) }
   return data.tenant_id
 }
@@ -316,15 +316,15 @@ async function handleSubscription(sub: Stripe.Subscription) {
   console.log('🔵 [Webhook] Upserting tenant_billing:', billingUpdate)
 
   // Try update first, then insert if no row exists
-  const { data: existing } = await supabase
-    .from('tenant_billing')
+  const { data: existing } = await createPlatformClient()
+      .schema('platform').from('product_subscriptions')
     .select('id')
     .eq('tenant_id', tenantId)
     .single()
 
   const { error } = existing
-    ? await supabase.from('tenant_billing').update(billingUpdate).eq('tenant_id', tenantId)
-    : await supabase.from('tenant_billing').insert(billingUpdate)
+    ? await createPlatformClient().schema('platform').from('product_subscriptions').update(billingUpdate).eq('tenant_id', tenantId)
+    : await createPlatformClient().schema('platform').from('product_subscriptions').insert(billingUpdate)
 
   if (error) {
     console.error('🔴 [Webhook] Failed to update tenant_billing:', error)
@@ -342,19 +342,22 @@ async function handleSubscription(sub: Stripe.Subscription) {
   if (sub.status === 'active' && plan !== 'trial') {
     try {
       // Get tenant admin email
-      const { data: tenantData } = await supabase
-        .from('tenants')
+      const { data: tenantData } = await createPlatformClient()
+          .schema('platform')
+          .from('tenants')
         .select('name, subdomain')
         .eq('id', tenantId)
         .single()
 
-      const { data: adminData } = await supabase
-        .from('users')
-        .select('email')
-        .eq('tenant_id', tenantId)
-        .eq('role', 'admin')
-        .limit(1)
-        .single()
+      const { data: adminData } = await createSharedClient()
+          .schema('shared')
+          .from('users')
+          .select('email')
+          .eq('tenant_id', tenantId)
+          .eq('is_master_admin', false)
+          .eq('is_active', true)
+          .limit(1)
+          .single()
 
       if (adminData?.email) {
         const subAny = sub as any
@@ -454,7 +457,7 @@ function buildUpgradeEmailHtml(params: {
 
 async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
   const tenantId = await getTenantId(sub.customer as string)
-  await supabase.from('tenant_billing').update({
+  await createPlatformClient().schema('platform').from('product_subscriptions').update({
     status: 'cancelled',
     cancelled_at: new Date().toISOString(),
   }).eq('tenant_id', tenantId)
@@ -485,7 +488,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     invoice_pdf_url: invoice.invoice_pdf || null,
   }, { onConflict: 'stripe_invoice_id' })
 
-  await supabase.from('tenant_billing')
+  await createPlatformClient().schema('platform').from('product_subscriptions')
     .update({
       status: 'active'
     })
@@ -505,24 +508,26 @@ async function sendPaymentConfirmation(tenantId: string, invoice: Stripe.Invoice
   const { createServiceRoleClient } = await import('@/lib/supabase/server')
   const adminClient = createServiceRoleClient()
 
-  const { data: tenant } = await adminClient
-    .from('tenants')
+  const { data: tenant } = await createPlatformClient()
+      .schema('platform')
+      .from('tenants')
     .select('company_name, subdomain')
     .eq('id', tenantId)
     .single()
 
   const { data: billing } = await adminClient
-    .from('tenant_billing')
+    .schema('platform').from('product_subscriptions')
     .select('plan')
     .eq('tenant_id', tenantId)
     .single()
 
-  const { data: adminUsers } = await adminClient
-    .from('users')
-    .select('email')
-    .eq('tenant_id', tenantId)
-    .eq('is_admin', true)
-    .limit(1)
+  const { data: adminUsers } = await createSharedClient()
+      .schema('shared')
+      .from('users')
+      .select('email')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .limit(1)
 
   const adminEmail = adminUsers?.[0]?.email
 
@@ -548,14 +553,14 @@ async function sendPaymentConfirmation(tenantId: string, invoice: Stripe.Invoice
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   if (!invoice.customer) return
   const tenantId = await getTenantId(invoice.customer as string)
-  await supabase.from('tenant_billing').update({ status: 'past_due' }).eq('tenant_id', tenantId)
+  await createPlatformClient().schema('platform').from('product_subscriptions').update({ status: 'past_due' }).eq('tenant_id', tenantId)
   console.log(`[Webhook] Payment failed: ${tenantId}`)
 }
 
 async function handlePaymentMethod(pm: Stripe.PaymentMethod) {
   if (!pm.customer) return
   const tenantId = await getTenantId(pm.customer as string)
-  await supabase.from('tenant_billing').update({
+  await createPlatformClient().schema('platform').from('product_subscriptions').update({
     payment_method_type: pm.type,
     payment_method_last4: pm.card?.last4 || null,
     payment_method_brand: pm.card?.brand || null,

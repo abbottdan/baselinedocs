@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,11 +20,13 @@ export default async function DashboardPage() {
   }
 
   // Get user's full name
-  const { data: userData } = await supabase
-    .from('users')
-    .select('full_name')
-    .eq('id', user.id)
-    .single()
+  const sharedClient = createSharedClient()
+    const { data: userData } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('full_name, tenant_id, is_master_admin, is_active')
+      .eq('id', user.id)
+      .single()
 
   // Get tenant from CURRENT SUBDOMAIN
   const tenantId = await getSubdomainTenantId()
@@ -32,10 +34,12 @@ export default async function DashboardPage() {
   // Get tenant info (company name and timezone)
   let tenant = null
   if (tenantId) {
-    const { data: tenantData } = await supabase
+    const platformClient = createPlatformClient()
+    const { data: tenantData } = await platformClient
+      .schema('platform')
       .from('tenants')
-      .select('company_name, timezone')
-      .eq('id', tenantId)
+      .select('id, company_name, subdomain, logo_url')
+      .eq('id', userData?.tenant_id)
       .single()
     
     tenant = tenantData

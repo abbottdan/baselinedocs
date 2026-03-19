@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logger, logError, logServerAction } from '@/lib/logger'
 import { createDocumentSchema } from '@/lib/validation/schemas'
@@ -19,11 +19,28 @@ import { checkBaselineReqsReferences, markBaselineReqsLinksBroken, type Baseline
  * Read Only and Deactivated users cannot create, edit, or delete
  */
 async function checkWritePermission(supabase: any, userId: string): Promise<{ allowed: boolean, role: string | null }> {
-  const { data: userData } = await supabase
-    .from('users')
-    .select('role, is_active')
-    .eq('id', userId)
-    .single()
+  const sharedClient = createSharedClient()
+    const { data: _sharedUser } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('is_active, is_master_admin, tenant_id')
+      .eq('id', userId)
+      .single()
+    // Fetch role from docs.user_roles
+    let _docRole = 'user'
+    if (_sharedUser && !_sharedUser.is_master_admin) {
+      const { data: rr } = await supabase
+        .schema('docs').from('user_roles')
+        .select('role').eq('user_id', userId)
+        .eq('tenant_id', _sharedUser.tenant_id).single()
+      _docRole = rr?.role ?? 'user'
+    } else if (_sharedUser?.is_master_admin) {
+      _docRole = 'master_admin'
+    }
+    const userData = {
+      role: _docRole === 'readonly' ? 'Read Only' : _docRole === 'tenant_admin' ? 'Admin' : 'Normal',
+      is_active: _sharedUser?.is_active ?? false,
+    }
 
   const role = userData?.role || 'Normal'
   const isActive = userData?.is_active !== false
@@ -217,11 +234,13 @@ export async function createDocument(formData: FormData) {
     })
 
     // Check if user is master admin (for cross-tenant file operations)
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_master_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient2 = createSharedClient()
+      const { data: userData } = await sharedClient2
+        .schema('shared')
+        .from('users')
+        .select('is_master_admin')
+        .eq('id', user.id)
+        .single()
 
     const isMasterAdmin = userData?.is_master_admin || false
 
@@ -696,11 +715,13 @@ export async function deleteDocument(
     }
 
     // Check if user is master admin (for cross-tenant operations)
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_master_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient2 = createSharedClient()
+      const { data: userData } = await sharedClient2
+        .schema('shared')
+        .from('users')
+        .select('is_master_admin')
+        .eq('id', user.id)
+        .single()
 
     const isMasterAdmin = userData?.is_master_admin || false
 

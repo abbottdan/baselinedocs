@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient()
 
-  const { data: tenant } = await supabase
-    .from('tenants')
+  const { data: tenant } = await createPlatformClient()
+      .schema('platform')
+      .schema('platform').from('tenants')
     .select('id')
     .eq('subdomain', subdomain)
     .eq('is_active', true)

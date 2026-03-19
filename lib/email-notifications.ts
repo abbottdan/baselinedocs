@@ -8,7 +8,7 @@
  */
 
 import { Resend } from 'resend'
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const fromEmail = process.env.EMAIL_FROM || 'notifications@baselinedocs.com'
@@ -73,11 +73,13 @@ async function shouldNotifyOrQueue(
   const supabase = await createClient()
 
   // Get user info
-  const { data: user } = await supabase
-    .from('users')
-    .select('email, full_name, tenant_id')
-    .eq('id', userId)
-    .single()
+  const _emailSharedClient = createSharedClient()
+    const { data: user } = await _emailSharedClient
+      .schema('shared')
+      .from('users')
+      .select('email, full_name, tenant_id')
+      .eq('id', userId)
+      .single()
 
   if (!user?.email) {
     return { action: 'disabled', email: null, userName: '', tenantId: null, digestTime: null }

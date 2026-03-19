@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -37,8 +37,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from('users')
+    const { data: userData } = await createSharedClient()
+        .schema('shared')
+        .from('users')
       .select('tenant_id')
       .eq('id', user.id)
       .single()

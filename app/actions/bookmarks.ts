@@ -123,7 +123,7 @@ export async function getBookmarkedDocuments() {
       .select(`
         *,
         document_types (name, prefix),
-        users!documents_created_by_fkey (email, full_name)
+        created_by
       `)
       .in('document_number', documentNumbers)
       .eq('status', 'Released')

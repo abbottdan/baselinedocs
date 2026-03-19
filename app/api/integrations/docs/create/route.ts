@@ -91,8 +91,9 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient()
 
   // ── Resolve tenant ────────────────────────────────────────────────────────
-  const { data: tenant, error: tenantError } = await supabase
-    .from('tenants')
+  const { data: tenant, error: tenantError } = await createPlatformClient()
+      .schema('platform')
+      .from('tenants')
     .select('id')
     .eq('subdomain', subdomain)
     .single()
@@ -105,10 +106,11 @@ export async function POST(req: NextRequest) {
   // ── Resolve user by email ─────────────────────────────────────────────────
   // Both apps share the same tenant subdomain — a user logged in to BaselineReqs
   // under acme.baselinereqs.com has the same email as their BaselineDocs account.
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id, email, is_active, role')
-    .eq('email', userEmail)
+  const { data: user, error: userError } = await createSharedClient()
+      .schema('shared')
+      .from('users')
+      .select('id, email, is_active, role')
+      .eq('email', userEmail)
     .eq('tenant_id', tenant.id)
     .single()
 

@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { revalidatePath } from 'next/cache'
 import { formatDocumentFilename } from '@/lib/file-naming'
 import { createDocumentAudit, AuditAction } from '@/lib/audit-helper'
@@ -44,11 +45,12 @@ export async function updateDocumentWithFiles(formData: FormData) {
       return { success: false, error: 'Tenant not found' }
     }
 
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('auto_rename_files')
-      .eq('id', tenantId)
-      .single()
+    const { data: tenant } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
+        .select('auto_rename_files')
+        .eq('id', tenantId)
+        .single()
 
     const autoRename = tenant?.auto_rename_files ?? true
 

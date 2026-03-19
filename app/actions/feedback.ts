@@ -1,7 +1,7 @@
 'use server'
 
 import { Resend } from 'resend'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 // Initialize Resend directly here
@@ -32,11 +32,13 @@ export async function submitFeedback(data: FeedbackData) {
     }
 
     // Get user details
-    const { data: userData } = await supabase
-      .from('users')
-      .select('full_name, email, tenant_id, is_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: userData } = await sharedClient
+        .schema('shared')
+        .from('users')
+        .select('full_name, email, tenant_id, is_master_admin')
+        .eq('id', user.id)
+        .single()
 
     // Format feedback type for display
     const typeLabels = {
@@ -146,7 +148,7 @@ export async function submitFeedback(data: FeedbackData) {
               </div>
               <div class="info-row">
                 <span class="label">Admin:</span>
-                <span>${userData?.is_admin ? 'Yes' : 'No'}</span>
+                <span>${userData?.is_master_admin ? 'Yes' : 'No'}</span>
               </div>
               <div class="info-row">
                 <span class="label">Tenant ID:</span>

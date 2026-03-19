@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logger, logError, logServerAction } from '@/lib/logger'
 import { addApproverSchema, removeApproverSchema, approveDocumentSchema, rejectDocumentSchema } from '@/lib/validation/schemas'
@@ -526,11 +526,13 @@ export async function submitForApproval(documentId: string) {
         .eq('document_id', documentId)
       
       if (approversList && approversList.length > 0) {
-        const { data: currentUser } = await supabase
-          .from('users')
-          .select('email, full_name')
-          .eq('id', user.id)
-          .single()
+        const sharedClient = createSharedClient()
+          const { data: currentUser } = await sharedClient
+            .schema('shared')
+            .from('users')
+            .select('email, full_name')
+            .eq('id', user.id)
+            .single()
 
         for (const approver of approversList) {
           await sendApprovalRequestEmail(approver.user_id, {
@@ -1059,11 +1061,13 @@ export async function rejectDocument(documentId: string, rejectionReason: string
 
     // Send rejection email to creator
     try {
-      const { data: currentUser } = await supabase
-        .from('users')
-        .select('email, full_name')
-        .eq('id', user.id)
-        .single()
+      const sharedClient = createSharedClient()
+        const { data: currentUser } = await sharedClient
+          .schema('shared')
+          .from('users')
+          .select('email, full_name')
+          .eq('id', user.id)
+          .single()
       
       await sendDocumentRejectedEmail(document.created_by, {
         documentNumber: document.document_number,
@@ -1129,10 +1133,7 @@ export async function getMyApprovals() {
           status,
           is_production,
           created_at,
-          creator:users!documents_created_by_fkey (
-            email,
-            full_name
-          )
+          created_by
         )
       `)
       .eq('user_email', user.email)
@@ -1192,7 +1193,7 @@ export async function withdrawFromApproval(documentId: string) {
     // Get document
     const { data: document, error: docError } = await supabase
       .from('documents')
-      .select('*, creator:users!documents_created_by_fkey(email)')
+      .select('*, created_by')
       .eq('id', documentId)
       .single()
 

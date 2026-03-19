@@ -1,7 +1,7 @@
 'use server'
 
 import { Resend } from 'resend'
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 
@@ -45,15 +45,18 @@ export async function submitContactForm(data: ContactFormData) {
     }
 
     // Get user details including tenant
-    const { data: userData } = await supabase
-      .from('users')
-      .select('full_name, email, tenant_id, is_admin')
-      .eq('id', user.id)
-      .single()
+    const sharedClient = createSharedClient()
+      const { data: userData } = await sharedClient
+        .schema('shared')
+        .from('users')
+        .select('full_name, email, tenant_id, is_master_admin')
+        .eq('id', user.id)
+        .single()
 
     // Get tenant name
-    const { data: tenantData } = await supabase
-      .from('tenants')
+    const { data: tenantData } = await createPlatformClient()
+        .schema('platform')
+        .from('tenants')
       .select('name, subdomain')
       .eq('id', userData?.tenant_id)
       .single()
@@ -187,7 +190,7 @@ export async function submitContactForm(data: ContactFormData) {
               <div class="value"><code>${user.id}</code></div>
               
               <div class="label">Admin:</div>
-              <div class="value">${userData?.is_admin ? 'Yes' : 'No'}</div>
+              <div class="value">${userData?.is_master_admin ? 'Yes' : 'No'}</div>
               
               <div class="label">Category:</div>
               <div class="value">${categoryLabels[validatedData.category]}</div>

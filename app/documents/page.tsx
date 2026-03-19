@@ -1,4 +1,5 @@
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient , createSharedClient} from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { cookies } from 'next/headers'
 import StorageLimitBanner from '@/components/admin/StorageLimitBanner'
 import { redirect } from 'next/navigation'
@@ -49,12 +50,22 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
   }
 
   // Get user's tenant and admin status (single query)
-  const { data: userData } = await supabase
+  const sharedClient = createSharedClient()
+  const { data: _su } = await sharedClient
+    .schema('shared')
     .from('users')
-    .select('tenant_id, is_admin')
+    .select('is_master_admin, tenant_id')
     .eq('id', user.id)
     .single()
-
+  let _roleIsAdmin = false
+  if (_su && !_su.is_master_admin) {
+    const { data: rr } = await supabase
+      .schema('docs').from('user_roles')
+      .select('role').eq('user_id', user.id)
+      .eq('tenant_id', _su.tenant_id).single()
+    _roleIsAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
+  }
+  const userData = { is_admin: _su?.is_master_admin || _roleIsAdmin, tenant_id: _su?.tenant_id }
   const isAdmin = userData?.is_admin || false
 
   // Get subdomain tenant (for multi-tenant support)
@@ -65,8 +76,8 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
   let tenantId = userData?.tenant_id
 
   if (subdomain) {
-    const { data: subdomainTenant } = await supabase
-      .from('tenants')
+    const { data: subdomainTenant } = await createPlatformClient()
+        .schema('platform').from('tenants')
       .select('id')
       .eq('subdomain', subdomain)
       .single()
@@ -80,8 +91,8 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
   const supabaseAdmin = createServiceRoleClient()
 
   // Get billing info
-  const { data: billingData } = await supabase
-    .from('tenant_billing')
+  const { data: billingData } = await createPlatformClient()
+      .schema('platform').from('product_subscriptions')
     .select('plan, storage_limit_gb')
     .eq('tenant_id', tenantId)
     .single()

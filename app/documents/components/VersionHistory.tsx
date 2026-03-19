@@ -55,7 +55,7 @@ export default function VersionHistory({ documentNumber, currentVersionId }: Ver
           status,
           released_at,
           released_by,
-          releaser:users!documents_released_by_fkey(email, full_name)
+          released_by
         `)
         .eq('document_number', documentNumber)
         .order('version', { ascending: false })

@@ -1,5 +1,5 @@
 // lib/document-helpers.ts
-import { createClient } from '@/lib/supabase/server'
+import { createClient , createSharedClient} from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 
 export interface DocumentVersion {
@@ -64,8 +64,8 @@ export async function fetchDocumentVersions(
     .select(`
       *,
       document_type:document_types(name, prefix),
-      creator:users!documents_created_by_fkey(email, full_name),
-      releaser:users!documents_released_by_fkey(email, full_name),
+      created_by,
+      released_by,
       document_files(*),
       approvers!approvers_document_id_fkey(*)
     `)
@@ -146,8 +146,8 @@ export async function fetchSpecificVersion(
     .select(`
       *,
       document_type:document_types(name, prefix),
-      creator:users!documents_created_by_fkey(email, full_name),
-      releaser:users!documents_released_by_fkey(email, full_name),
+      created_by,
+      released_by,
       document_files(*),
       approvers!approvers_document_id_fkey(*)
     `)
