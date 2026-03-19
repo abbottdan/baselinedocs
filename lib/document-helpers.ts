@@ -82,8 +82,31 @@ export async function fetchDocumentVersions(
     return null
   }
 
+  // Enrich versions with creator/releaser user info from shared.users
+  const userIds = [...new Set([
+    ...versions.map(v => v.created_by).filter(Boolean),
+    ...versions.map(v => v.released_by).filter(Boolean),
+  ])]
+
+  let userMap: Record<string, { email: string; full_name: string }> = {}
+  if (userIds.length > 0) {
+    const sharedClient = createSharedClient()
+    const { data: userRows } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('id, email, full_name')
+      .in('id', userIds)
+    userMap = Object.fromEntries((userRows || []).map(u => [u.id, { email: u.email, full_name: u.full_name }]))
+  }
+
+  const enrichedVersions = versions.map(v => ({
+    ...v,
+    creator:  v.created_by  ? userMap[v.created_by]  ?? null : null,
+    releaser: v.released_by ? userMap[v.released_by] ?? null : null,
+  }))
+
   // Sort versions properly - prototype first (vA, vB, vC), then production (v1, v2, v3)
-  const sortedVersions = [...versions].sort((a, b) => {
+  const sortedVersions = [...enrichedVersions].sort((a, b) => {
     const aVersion = a.version.substring(1) // Remove 'v'
     const bVersion = b.version.substring(1)
     
@@ -161,5 +184,22 @@ export async function fetchSpecificVersion(
     return null
   }
 
-  return data
+  // Enrich with creator/releaser user info
+  const userIds = [data.created_by, data.released_by].filter(Boolean)
+  let userMap: Record<string, { email: string; full_name: string }> = {}
+  if (userIds.length > 0) {
+    const sharedClient = createSharedClient()
+    const { data: userRows } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('id, email, full_name')
+      .in('id', userIds)
+    userMap = Object.fromEntries((userRows || []).map(u => [u.id, { email: u.email, full_name: u.full_name }]))
+  }
+
+  return {
+    ...data,
+    creator:  data.created_by  ? userMap[data.created_by]  ?? null : null,
+    releaser: data.released_by ? userMap[data.released_by] ?? null : null,
+  }
 }

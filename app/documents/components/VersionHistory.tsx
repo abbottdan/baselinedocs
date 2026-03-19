@@ -20,7 +20,7 @@ interface Version {
   released_by: string | null
   releaser?: {
     email: string
-    full_name: string
+    full_name: string | null
   } | null
 }
 
@@ -49,14 +49,7 @@ export default function VersionHistory({ documentNumber, currentVersionId }: Ver
       
       const { data, error } = await supabase
         .from('documents')
-        .select(`
-          id,
-          version,
-          status,
-          released_at,
-          released_by,
-          released_by
-        `)
+        .select('id, version, status, released_at, released_by')
         .eq('document_number', documentNumber)
         .order('version', { ascending: false })
 
@@ -66,6 +59,18 @@ export default function VersionHistory({ documentNumber, currentVersionId }: Ver
         return
       }
 
+      // Fetch releaser user info for any released versions
+      const releaserIds = [...new Set((data || []).map((d: any) => d.released_by).filter(Boolean))]
+      let releaserMap: Record<string, { email: string; full_name: string | null }> = {}
+      if (releaserIds.length > 0) {
+        const { data: users } = await supabase
+          .schema('shared')
+          .from('users')
+          .select('id, email, full_name')
+          .in('id', releaserIds)
+        releaserMap = Object.fromEntries((users || []).map((u: any) => [u.id, { email: u.email, full_name: u.full_name }]))
+      }
+
       // Transform the data to match our Version type
       const transformedData = (data || []).map((item: any) => ({
         id: item.id,
@@ -73,7 +78,7 @@ export default function VersionHistory({ documentNumber, currentVersionId }: Ver
         status: item.status,
         released_at: item.released_at,
         released_by: item.released_by,
-        releaser: Array.isArray(item.releaser) ? item.releaser[0] : item.releaser
+        releaser: item.released_by ? releaserMap[item.released_by] ?? null : null,
       }))
 
       // Sort versions: prototype (vA, vB...) first, then production (v1, v2...), newest first within each type

@@ -122,7 +122,17 @@ export const sendInvoiceReminders = inngest.createFunction(
           })
 
           // Get admin email
-          const adminEmail = (tenant as any).users?.find((u: any) => u.role === 'admin')?.email
+          // Fetch tenant admin email from shared.users
+    const { createSharedClient } = await import('@/lib/supabase/server')
+    const { data: adminUsers } = await createSharedClient()
+      .schema('shared')
+      .from('users')
+      .select('email')
+      .eq('tenant_id', tenant.id)
+      .eq('is_master_admin', false)
+      .eq('is_active', true)
+      .limit(1)
+    const adminEmail = adminUsers?.[0]?.email
           if (!adminEmail) {
             console.log(`[Inngest] No admin email found for tenant ${tenant.tenant_id}`)
             return { action: 'skipped', reason: 'no-email' }

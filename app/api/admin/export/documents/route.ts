@@ -97,10 +97,24 @@ export async function GET(request: NextRequest) {
 
     const headerRow = headers.map(h => esc(h)).join(',')
 
-    const dataRows = (documents ?? []).map(doc => {
+    // Fetch user emails for created_by / released_by UUIDs
+    const userIds = [...new Set([
+      ...(documents ?? []).map((d: any) => d.created_by).filter(Boolean),
+      ...(documents ?? []).map((d: any) => d.released_by).filter(Boolean),
+    ])]
+    let userEmailMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { createSharedClient } = await import('@/lib/supabase/server')
+      const { data: userRows } = await createSharedClient()
+        .schema('shared')
+        .from('users')
+        .select('id, email')
+        .in('id', userIds)
+      userEmailMap = Object.fromEntries((userRows || []).map((u: any) => [u.id, u.email]))
+    }
+
+    const dataRows = (documents ?? []).map((doc: any) => {
       const docType = Array.isArray(doc.document_types) ? doc.document_types[0] : doc.document_types
-      const createdByUser = Array.isArray(doc.created_by_user) ? doc.created_by_user[0] : doc.created_by_user
-      const releasedByUser = Array.isArray(doc.released_by_user) ? doc.released_by_user[0] : doc.released_by_user
 
       return [
         esc(doc.document_number),
@@ -112,10 +126,10 @@ export async function GET(request: NextRequest) {
         esc(doc.status),
         esc(doc.is_production ? 'Production' : 'Prototype'),
         esc(doc.project_code),
-        esc(createdByUser?.email),
+        esc(userEmailMap[doc.created_by] || doc.created_by),
         esc(formatDate(doc.created_at)),
         esc(formatDate(doc.updated_at)),
-        esc(releasedByUser?.email),
+        esc(userEmailMap[doc.released_by] || ''),
         esc(formatDate(doc.released_at)),
       ].join(',')
     })
