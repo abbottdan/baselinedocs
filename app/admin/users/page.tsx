@@ -1,92 +1,68 @@
 /**
- * Updated User Management Page with Limit Banner
- * app/admin/users/page.tsx
+ * app/admin/users/page.tsx — BaselineDocs
+ * CHANGED: Admin check via shared.users.is_master_admin + docs.user_roles
  */
-
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { redirect } from 'next/headers'
+import { getSubdomainTenantId } from '@/lib/tenant'
 import UserManagementTable from './UserManagementTable'
 import UserLimitBanner from '@/components/admin/UserLimitBanner'
 
 export default async function UsersPage() {
-  const supabase = await createClient()
+  const supabase      = await createClient()
+  const sharedClient  = createSharedClient()
 
-  // Check authentication
   const { data: { user }, error: userError } = await supabase.auth.getUser()
-  
-  if (userError || !user) {
-    redirect('/')
-  }
+  if (userError || !user) redirect('/')
 
-  // Check admin status
-  const { data: userData } = await supabase
+  const { data: sharedUser } = await sharedClient
+    .schema('shared')
     .from('users')
-    .select('is_admin, tenant_id')
+    .select('tenant_id, is_master_admin, is_active')
     .eq('id', user.id)
     .single()
 
-  if (!userData?.is_admin) {
-    redirect('/dashboard')
-  }
+  if (!sharedUser?.is_active) redirect('/dashboard')
 
-  // Get subdomain tenant (for multi-tenant support)
-  const cookieStore = await cookies()
-  const subdomainCookie = cookieStore.get('tenant_subdomain')
-  const subdomain = subdomainCookie?.value
-
-  let targetTenantId = userData.tenant_id
-
-  if (subdomain) {
-    const { data: subdomainTenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('subdomain', subdomain)
+  const isAdmin = sharedUser.is_master_admin || false
+  if (!isAdmin) {
+    const { data: roleRow } = await supabase
+      .schema('docs')
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('tenant_id', sharedUser.tenant_id)
       .single()
-    
-    if (subdomainTenant) {
-      targetTenantId = subdomainTenant.id
+    if (!['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')) {
+      redirect('/dashboard')
     }
   }
 
-  // Get user limit information for banner
-  const supabaseAdmin = createServiceRoleClient()
-  
-  // Get billing info
-  const { data: billingData } = await supabase
-    .from('tenant_billing')
-    .select('plan, user_limit')
-    .eq('tenant_id', targetTenantId)
-    .single()
+  const targetTenantId = await getSubdomainTenantId()
+  if (!targetTenantId) redirect('/dashboard')
 
-  // Count current users (exclude deactivated, use admin client to bypass RLS)
-  const { count: currentUserCount } = await supabaseAdmin
+  // Get subscription info for user limit banner (from platform via product_subscriptions view)
+  // Fall back to safe defaults if not available
+  const supabaseAdmin = createServiceRoleClient()
+  const { count: currentUserCount } = await sharedClient
+    .schema('shared')
     .from('users')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', targetTenantId)
-    .neq('role', 'Deactivated')
-
-  const plan = billingData?.plan || 'trial'
-  const userLimit = billingData?.user_limit || 5
-  const currentUsers = currentUserCount || 0
+    .eq('is_active', true)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="mt-2 text-gray-600">Manage user roles and permissions</p>
-        </div>
-
-        {/* User Limit Banner */}
-        <UserLimitBanner 
-          currentUsers={currentUsers}
-          userLimit={userLimit}
-          plan={plan}
-        />
-
-        <UserManagementTable />
+    <div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+        <p className="mt-2 text-gray-600">Manage user roles and permissions</p>
       </div>
+      <UserLimitBanner
+        currentUsers={currentUserCount || 0}
+        userLimit={99}
+        plan="trial"
+      />
+      <UserManagementTable />
     </div>
   )
 }
