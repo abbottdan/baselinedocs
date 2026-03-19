@@ -44,7 +44,7 @@ export default async function CompanySettingsPage() {
   const { data: tenant } = await createPlatformClient()
       .schema('platform')
       .from('tenants')
-    .select('id, company_name, subdomain, logo_url, timezone')
+    .select('id, company_name, subdomain, logo_url, timezone, auto_rename_files')
     .eq('subdomain', currentSubdomain)
     .single()
 
