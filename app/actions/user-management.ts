@@ -307,7 +307,7 @@ export async function addUser(data: {
     if (roleError) return { success: false, error: 'Failed to assign role' }
 
     revalidatePath('/admin/users')
-    return { success: true }
+    return { success: true, message: `User ${data.email.toLowerCase()} added successfully` }
   } catch (error: any) {
     logger.error('Failed to add user', { error: error.message })
     return { success: false, error: error.message || 'Failed to add user' }
