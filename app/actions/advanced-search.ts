@@ -50,9 +50,7 @@ export async function searchDocuments(
       released_at,
       created_by,
       released_by,
-      document_type:document_types!inner(id, name, prefix),
-      created_by_user:users!documents_created_by_fkey(email, full_name),
-      released_by_user:users!documents_released_by_fkey(email, full_name)
+      document_type:document_types(id, name, prefix)
     `, { count: 'exact' })
     .eq('tenant_id', tenantId)
 
@@ -170,11 +168,33 @@ export async function searchDocuments(
     }
   }
 
+  // Enrich with creator/releaser user info from shared.users
+  const userIds = [...new Set([
+    ...filteredDocuments.map((d: any) => d.created_by).filter(Boolean),
+    ...filteredDocuments.map((d: any) => d.released_by).filter(Boolean),
+  ])]
+  let userMap: Record<string, { email: string; full_name: string | null }> = {}
+  if (userIds.length > 0) {
+    const sharedClient = createSharedClient()
+    const { data: userRows } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('id, email, full_name')
+      .in('id', userIds)
+    userMap = Object.fromEntries((userRows || []).map((u: any) => [u.id, { email: u.email, full_name: u.full_name }]))
+  }
+
+  const enrichedDocuments = filteredDocuments.map((doc: any) => ({
+    ...doc,
+    created_by_user: doc.created_by ? userMap[doc.created_by] ?? null : null,
+    released_by_user: doc.released_by ? userMap[doc.released_by] ?? null : null,
+  }))
+
   const totalCount = count || 0
   const totalPages = Math.ceil(totalCount / pageSize)
 
   return {
-    documents: filteredDocuments,
+    documents: enrichedDocuments,
     totalCount,
     page,
     pageSize,
