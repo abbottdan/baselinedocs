@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -376,11 +377,13 @@ export async function addUser(data: {
     console.log('🔍 [User Limit Check] Subdomain:', subdomain)
     console.log('🔍 [User Limit Check] Target Tenant ID:', targetTenantId)
 
-    // Get tenant's user limit from billing (not hardcoded!)
-    const { data: billingData, error: billingError } = await supabase
-      .from('tenant_billing')
+    // Get tenant's user limit from platform.product_subscriptions
+    const { data: billingData, error: billingError } = await createPlatformClient()
+      .schema('platform')
+      .from('product_subscriptions')
       .select('plan, user_limit')
       .eq('tenant_id', targetTenantId)
+      .eq('product', 'baselinedocs')
       .single()
 
     console.log('🔍 [User Limit Check] Billing query result:', {
@@ -412,9 +415,9 @@ export async function addUser(data: {
     const { count: userCount, error: countError, data: debugUsers } = await supabaseAdmin
       .schema('shared')
       .from('users')
-      .select('id, email, role, is_active', { count: 'exact' })
+      .select('id, email, is_active', { count: 'exact' })
       .eq('tenant_id', targetTenantId)
-      .neq('role', 'Deactivated')
+      .eq('is_active', true)
 
     // LOG EVERY SINGLE USER
     console.log('🔍 [User Limit Check] User count result:', {
@@ -425,7 +428,7 @@ export async function addUser(data: {
 
     console.log('🔍 [User Limit Check] FULL USER LIST:')
     debugUsers?.forEach((u, index) => {
-      console.log(`  ${index + 1}. ${u.email} | Role: ${u.role} | Active: ${u.is_active}`)
+      console.log(`  ${index + 1}. ${u.email} | Active: ${u.is_active}`)
     })
 
     console.log('🔍 [User Limit Check] Summary:', {
