@@ -313,3 +313,93 @@ export async function addUser(data: {
     return { success: false, error: error.message || 'Failed to add user' }
   }
 }
+
+export async function importUsersFromCSV(csvData: string) {
+  const supabase     = await createClient()
+  const sharedClient = createSharedClient()
+
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return { success: false, error: 'Not authenticated', imported: 0, failed: 0, errors: [] }
+    }
+
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
+      .from('users')
+      .select('is_master_admin, tenant_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!sharedUser) {
+      return { success: false, error: 'User not found', imported: 0, failed: 0, errors: [] }
+    }
+
+    let isAdmin = sharedUser.is_master_admin
+    if (!isAdmin) {
+      const { data: roleRow } = await supabase
+        .schema('docs')
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('tenant_id', sharedUser.tenant_id)
+        .single()
+      isAdmin = ['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')
+    }
+
+    if (!isAdmin) {
+      return { success: false, error: 'Only administrators can import users', imported: 0, failed: 0, errors: [] }
+    }
+
+    const lines = csvData.trim().split('\n')
+    if (lines.length < 2) {
+      return { success: false, error: 'CSV file is empty or has no data rows', imported: 0, failed: 0, errors: [] }
+    }
+
+    const dataRows = lines.slice(1)
+    let imported = 0
+    let failed = 0
+    const errors: string[] = []
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i].trim()
+      if (!row) continue
+
+      const columns = row.split(',').map(col => col.trim().replace(/^["']|["']$/g, ''))
+      if (columns.length < 4) {
+        failed++
+        errors.push(`Row ${i + 2}: Invalid format - expected 4 columns (First Name, Last Name, Email, Role)`)
+        continue
+      }
+
+      const [firstName, lastName, email, role] = columns
+
+      if (!['Admin', 'Normal', 'Read Only'].includes(role)) {
+        failed++
+        errors.push(`Row ${i + 2}: Invalid role "${role}" - must be Admin, Normal, or Read Only`)
+        continue
+      }
+
+      const result = await addUser({ email, firstName, lastName, role: role as UserRole })
+
+      if (result.success) {
+        imported++
+      } else {
+        failed++
+        errors.push(`Row ${i + 2} (${email}): ${result.error}`)
+      }
+    }
+
+    revalidatePath('/admin/users')
+    return {
+      success: true,
+      imported,
+      failed,
+      errors,
+      message: `Import complete: ${imported} users added, ${failed} failed`
+    }
+  } catch (error: any) {
+    logger.error('Failed to import users from CSV', { error: error.message })
+    return { success: false, error: error.message || 'Failed to import users', imported: 0, failed: 0, errors: [] }
+  }
+}
