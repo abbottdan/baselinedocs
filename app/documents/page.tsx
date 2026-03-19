@@ -107,7 +107,13 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
   const currentStorageGB = currentStorageBytes / (1024 * 1024 * 1024)
 
   const plan = billingData?.plan || 'trial'
-  const storageLimitGB = billingData?.storage_limit_gb || 1
+  const PLAN_STORAGE_GB: Record<string, number> = {
+    trial: 1, starter: 5, professional: 25, enterprise: 100,
+  }
+  const storageLimitGB: number =
+    billingData?.storage_limit_gb != null
+      ? Number(billingData.storage_limit_gb)
+      : (PLAN_STORAGE_GB[plan] ?? 1)
 
   // Parse search params into filters
   const filters: AdvancedSearchFilters = {

@@ -22,16 +22,17 @@ export async function checkStorageLimit(
   const supabase = await createClient()
   const supabaseAdmin = createServiceRoleClient()
 
-  // Get tenant's storage limit
+  // Get tenant's subscription — storage_limit_gb is the authoritative value.
+  // NULL means no custom override; fall back to plan defaults.
   const { data: billingData } = await createPlatformClient()
       .schema('platform')
       .from('product_subscriptions')
-      .select('user_limit, plan, status')
+      .select('plan, status, storage_limit_gb')
       .eq('tenant_id', tenantId)
       .eq('product', 'baselinedocs')
       .single()
 
-  if (!billingData || !billingData.storage_limit_gb) {
+  if (!billingData) {
     return {
       allowed: false,
       currentStorageGB: 0,
@@ -42,7 +43,19 @@ export async function checkStorageLimit(
     }
   }
 
-  const storageLimitGB = billingData.storage_limit_gb
+  // Plan defaults — used only when storage_limit_gb is NULL (no add-on purchased)
+  const PLAN_STORAGE_GB: Record<string, number> = {
+    trial:        1,
+    starter:      5,
+    professional: 25,
+    enterprise:   100,
+  }
+
+  const plan = billingData.plan ?? 'trial'
+  const storageLimitGB: number =
+    billingData.storage_limit_gb != null
+      ? Number(billingData.storage_limit_gb)
+      : (PLAN_STORAGE_GB[plan] ?? 1)
   const storageLimitBytes = storageLimitGB * 1024 * 1024 * 1024
 
   // Calculate current storage usage (use admin client to bypass RLS)
