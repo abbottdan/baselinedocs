@@ -47,6 +47,15 @@ export default function BillingPageClient({
   }
 
   const currentPlan = billing?.plan || 'trial'
+
+  // Derive storage limit — use billing column if set, else plan default
+  const PLAN_STORAGE_GB: Record<string, number> = {
+    trial: 1, starter: 5, professional: 25, enterprise: 100,
+  }
+  const storageLimitGB: number =
+    billing?.storage_limit_gb != null
+      ? Number(billing.storage_limit_gb)
+      : (PLAN_STORAGE_GB[currentPlan] ?? 1)
   const currentPrice = planPrices[currentPlan]
 
   // Format helpers
@@ -171,7 +180,7 @@ export default function BillingPageClient({
                 {billing?.trial_ends_at && (
                   <div className="flex items-center gap-2 text-amber-600">
                     <Calendar className="h-4 w-4" />
-                    <span>Trial ends: {formatDate(billing.trial_ends_at)}</span>
+                    <span>Trial ends: {formatDate(billing?.trial_ends_at)}</span>
                   </div>
                 )}
               </div>
@@ -256,33 +265,29 @@ export default function BillingPageClient({
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900">
-                      {usage.storageGB} / {billing.storage_limit_gb || 1} GB
+                      {usage.storageGB} / {storageLimitGB} GB
                     </div>
-                    {billing.storage_limit_gb && (
-                      <div className="text-xs text-gray-500">
-                        {((parseFloat(usage.storageGB) / billing.storage_limit_gb) * 100).toFixed(0)}% used
+                    <div className="text-xs text-gray-500">
+                        {((parseFloat(usage.storageGB) / storageLimitGB) * 100).toFixed(0)}% used
                       </div>
-                    )}
                   </div>
                 </div>
 
                 {/* Storage Progress Bar - Full Width Below */}
-                {billing.storage_limit_gb && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                     <div
                       className={`h-full transition-all duration-300 ${
-                        parseFloat(usage.storageGB) >= billing.storage_limit_gb
+                        parseFloat(usage.storageGB) >= storageLimitGB
                           ? 'bg-red-500'
-                          : parseFloat(usage.storageGB) / billing.storage_limit_gb >= 0.9
+                          : parseFloat(usage.storageGB) / storageLimitGB >= 0.9
                             ? 'bg-amber-500'
                             : 'bg-green-500'
                       }`}
                       style={{
-                        width: `${Math.min((parseFloat(usage.storageGB) / (billing.storage_limit_gb || 1)) * 100, 100)}%`
+                        width: `${Math.min((parseFloat(usage.storageGB) / storageLimitGB) * 100, 100)}%`
                       }}
                     />
                   </div>
-                )}
               </div>
             </div>
           </CardContent>
@@ -365,7 +370,7 @@ export default function BillingPageClient({
                 </div>
                 <div>
                   <div className="font-medium text-gray-900 capitalize">
-                    {billing.payment_method_brand} •••• {billing.payment_method_last4}
+                    {billing?.payment_method_brand} •••• {billing?.payment_method_last4}
                   </div>
                   {billing.payment_method_exp_month && billing.payment_method_exp_year && (
                     <div className="text-sm text-gray-500">
@@ -390,8 +395,7 @@ export default function BillingPageClient({
         tenantId={tenant.id}
         paymentMethodBrand={billing?.payment_method_brand}
         paymentMethodLast4={billing?.payment_method_last4}
-        paymentMethodExpMonth={billing?.payment_method_exp_month}
-        paymentMethodExpYear={billing?.payment_method_exp_year}
+
       />
     </>
   )
