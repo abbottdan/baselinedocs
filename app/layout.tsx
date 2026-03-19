@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navigation from '@/components/dashboard/Navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createSharedClient } from '@/lib/supabase/server'
 import { Toaster } from 'sonner'
 import { TenantThemeProvider } from '@/components/TenantThemeProvider'
 
@@ -37,16 +37,37 @@ export default async function RootLayout({
   let isAdmin = false
   let fullName = ''
   let userRole = null
+
   if (user) {
-    const { data: userData } = await supabase
+    // CHANGED: query shared.users for identity fields — no 'role' or 'is_admin' column there.
+    // is_admin is derived from docs.user_roles via the public.users compatibility view.
+    const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
       .from('users')
-      .select('is_admin, full_name, role')
+      .select('full_name, is_master_admin')
       .eq('id', user.id)
       .single()
-    
-    isAdmin = userData?.is_admin || false
-    fullName = userData?.full_name || ''
-    userRole = userData?.role || null
+
+    fullName = sharedUser?.full_name || ''
+
+    // Master admins are always admins
+    if (sharedUser?.is_master_admin) {
+      isAdmin = true
+      userRole = 'Admin'
+    } else {
+      // Check role in docs.user_roles for regular users
+      const { data: roleRow } = await supabase
+        .schema('docs')
+        .from('user_roles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      const role = roleRow?.role || 'user'
+      isAdmin = ['tenant_admin', 'master_admin'].includes(role)
+      userRole = isAdmin ? 'Admin' : 'Normal'
+    }
   }
 
   return (

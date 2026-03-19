@@ -151,7 +151,7 @@ export async function getCurrentSubdomain(): Promise<string> {
  */
 export async function getSubdomainTenantId(): Promise<string | null> {
   const subdomain = await getCurrentSubdomain()
-  //if (!subdomain || subdomain === 'app') return null
+  if (!subdomain) return null
   return getTenantIdBySubdomain(subdomain)
 }
 
@@ -168,7 +168,7 @@ export async function getCurrentTenantId(): Promise<string | null> {
  */
 export async function getCurrentTenantData(): Promise<PlatformTenant | null> {
   const subdomain = await getCurrentSubdomain()
-  if (!subdomain || subdomain === 'app') return null
+  if (!subdomain) return null
   return getTenantBySubdomain(subdomain)
 }
 

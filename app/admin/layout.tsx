@@ -1,13 +1,7 @@
 /**
  * app/admin/layout.tsx — BaselineDocs
- *
- * CHANGED:
- *  - Admin check uses shared.users.is_master_admin via createSharedClient()
- *  - For non-master-admins, checks docs.user_roles.role
- *  - Removed getSubdomainTenantId() guard — master admins bypass it entirely,
- *    and the tenants table no longer exists in the product DB.
+ * CHANGED: queries shared.users + docs.user_roles instead of public.users.is_admin
  */
-
 import { createClient, createSharedClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import AdminNavTabs from './AdminNavTabs'
@@ -20,9 +14,7 @@ export default async function AdminLayout({
   const supabase = await createClient()
 
   const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) {
-    redirect('/')
-  }
+  if (userError || !user) redirect('/')
 
   // Check identity from shared.users
   const sharedClient = createSharedClient()
@@ -33,15 +25,12 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single()
 
-  if (!sharedUser || !sharedUser.is_active) {
-    redirect('/dashboard')
-  }
+  if (!sharedUser || !sharedUser.is_active) redirect('/dashboard')
 
   const isMasterAdmin = sharedUser.is_master_admin === true
 
   if (!isMasterAdmin) {
-    // For non-master admins, check role in docs.user_roles
-    // tenant_id comes from shared.users — no platform DB call needed here
+    // Non-master-admins must have tenant_admin role in docs.user_roles
     const { data: roleRow } = await supabase
       .schema('docs')
       .from('user_roles')
@@ -62,12 +51,8 @@ export default async function AdminLayout({
           <h1 className="text-3xl font-bold text-gray-900">Admin Panel</h1>
           <p className="mt-2 text-gray-600">Manage users, settings, and configuration</p>
         </div>
-
         <AdminNavTabs isMasterAdmin={isMasterAdmin} />
-
-        <div>
-          {children}
-        </div>
+        <div>{children}</div>
       </div>
     </div>
   )
