@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navigation from '@/components/dashboard/Navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createSharedClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { getCurrentSubdomain } from '@/lib/tenant'
 import { Toaster } from 'sonner'
@@ -41,15 +41,31 @@ export default async function RootLayout({
   let userRole = null
   let companyLogo: string | null = null
   if (user) {
-    const { data: userData } = await supabase
+    const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
+      .schema('shared')
       .from('users')
-      .select('is_admin, full_name, role')
+      .select('full_name, is_master_admin, tenant_id')
       .eq('id', user.id)
       .single()
-    
-    isAdmin = userData?.is_admin || false
-    fullName = userData?.full_name || ''
-    userRole = userData?.role || null
+
+    fullName = sharedUser?.full_name || ''
+
+    if (sharedUser?.is_master_admin) {
+      isAdmin = true
+      userRole = 'Admin'
+    } else if (sharedUser?.tenant_id) {
+      const { data: roleRow } = await supabase
+        .schema('docs')
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('tenant_id', sharedUser.tenant_id)
+        .single()
+      const role = roleRow?.role ?? 'user'
+      isAdmin = ['tenant_admin', 'master_admin'].includes(role)
+      userRole = isAdmin ? 'Admin' : 'Normal'
+    }
 
     // Fetch company logo from platform tenants (server-side, replaces client-side tenants query)
     const { data: tenantRow } = await createPlatformClient()

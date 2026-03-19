@@ -1,7 +1,7 @@
 // app/actions/document-types.ts
 'use server'
 
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logger, logServerAction, logError, logDatabaseQuery } from '@/lib/logger'
@@ -521,9 +521,11 @@ export async function deleteDocumentType(id: string) {
       .single()
 
     // Delete document type
-    const { error: deleteError } = await supabase
-      .from('document_types')
-      .delete()
+    const supabaseAdmin3 = createServiceRoleClient()
+    const { error: deleteError } = await supabaseAdmin3
+        .schema('docs')
+        .from('document_types')
+        .delete()
       .eq('id', id)
 
     if (deleteError) {
@@ -920,9 +922,11 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
     }
 
     // Reset the counter to 1
-    const { error: updateError } = await supabase
-      .from('document_types')
-      .update({ 
+    const supabaseAdmin2 = createServiceRoleClient()
+    const { error: updateError } = await supabaseAdmin2
+        .schema('docs')
+        .from('document_types')
+        .update({ 
         next_number: 1,
         updated_at: new Date().toISOString()
       })

@@ -222,7 +222,16 @@ export default function BillingPageClient({
                     <div className="text-xs text-gray-500">Active accounts</div>
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{usage.userCount}</div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-900">
+                    {usage.userCount} / {billing?.user_limit ?? '∞'}
+                  </div>
+                  {billing?.user_limit && (
+                    <div className="text-xs text-gray-500">
+                      {Math.round((usage.userCount / billing.user_limit) * 100)}% used
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between">
@@ -235,7 +244,16 @@ export default function BillingPageClient({
                     <div className="text-xs text-gray-500">Total in system</div>
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{usage.documentCount}</div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-900">
+                    {usage.documentCount} / {billing?.document_limit ?? '∞'}
+                  </div>
+                  {billing?.document_limit && (
+                    <div className="text-xs text-gray-500">
+                      {Math.round((usage.documentCount / billing.document_limit) * 100)}% used
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between">

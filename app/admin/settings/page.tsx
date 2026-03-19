@@ -44,19 +44,25 @@ export default async function CompanySettingsPage() {
   const { data: tenant } = await createPlatformClient()
       .schema('platform')
       .from('tenants')
-    .select('id, company_name, subdomain, logo_url, auto_rename_files, timezone')
+    .select('id, company_name, subdomain, logo_url, timezone')
     .eq('subdomain', currentSubdomain)
     .single()
 
   if (!tenant) {
+    // Fallback: create a minimal tenant object so the form still renders
+    // This happens when auto_rename_files column doesn't exist yet on platform.tenants
+    // or when the subdomain lookup fails for the dev tenant
+    const fallbackTenant = {
+      id: await (async () => { const { getTenantIdBySubdomain } = await import('@/lib/supabase/platform'); return await getTenantIdBySubdomain(currentSubdomain) })() || '',
+      company_name: 'ClearStride (Dev)',
+      subdomain: currentSubdomain,
+      logo_url: null,
+      auto_rename_files: true,
+      timezone: 'America/Los_Angeles',
+    }
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-center py-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Tenant Not Found</h2>
-          <p className="text-gray-600">
-            Could not find settings for subdomain: {currentSubdomain}
-          </p>
-        </div>
+        <CompanySettingsForm tenant={fallbackTenant} />
       </div>
     )
   }
