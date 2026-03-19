@@ -13,15 +13,16 @@ type Props = {
   user: {
     email: string;
     fullName: string;
-  };
+  }
+  companyLogo?: string | null;
   isAdmin: boolean;
   userRole: string | null;
 };
 
-export default function Navigation({ user, isAdmin }: Props) {
+export default function Navigation({ user, isAdmin , companyLogo: companyLogoProp = null }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(companyLogoProp ?? null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -37,30 +38,7 @@ export default function Navigation({ user, isAdmin }: Props) {
   }, []);
 
   // Fetch tenant company logo
-  useEffect(() => {
-    async function fetchLogo() {
-      const supabase = createClient();
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('tenant_id')
-          .eq('id', currentUser.id)
-          .single();
-        if (userData?.tenant_id) {
-          const { data: tenant } = await supabase
-            .from('tenants')
-            .select('logo_url')
-            .eq('id', userData.tenant_id)
-            .single();
-          if (tenant?.logo_url) {
-            setCompanyLogo(tenant.logo_url);
-          }
-        }
-      }
-    }
-    fetchLogo();
-  }, []);
+  // companyLogo is passed as a prop from app/layout.tsx
 
   const handleSignOut = async () => {
     const supabase = createClient();

@@ -55,7 +55,7 @@ export default async function BillingPage() {
   const { data: billing } = await createPlatformClient()
       .schema('platform')
       .from('product_subscriptions')
-      .select('plan, status, stripe_customer_id, stripe_subscription_id, user_limit, next_billing_date')
+      .select('plan, status, stripe_customer_id, stripe_subscription_id, user_limit, next_billing_date, storage_limit_gb')
       .eq('tenant_id', tenantData.id)
       .eq('product', 'baselinedocs')
       .single()
