@@ -44,18 +44,33 @@ export async function getAllUsers() {
     const userEmail = user.email
 
     // Check admin status and get tenant_id
-    const { data: userData, error: adminCheckError } = await supabase
+    const sharedClient = createSharedClient()
+    const { data: sharedUser } = await sharedClient
       .schema('shared')
       .from('users')
-      .select('is_admin, role, tenant_id, is_master_admin')
+      .select('tenant_id, is_master_admin')
       .eq('id', userId)
       .single()
 
-    if (adminCheckError || !userData?.is_admin) {
+    let isAdmin = sharedUser?.is_master_admin ?? false
+    if (sharedUser && !sharedUser.is_master_admin) {
+      const { data: roleRow } = await supabase
+        .schema('docs')
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .eq('tenant_id', sharedUser.tenant_id)
+        .single()
+      isAdmin = ['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')
+    }
+
+    const userData = sharedUser ? { ...sharedUser, is_admin: isAdmin } : null
+
+    if (!userData?.is_admin) {
       logger.warn('Non-admin attempted to access user list', {
         userId,
         userEmail,
-        isAdmin: userData?.is_admin
+        isAdmin
       })
       return {
         success: false,
@@ -222,11 +237,17 @@ export async function updateUserRole(
     const { data: userData, error: adminCheckError } = await supabase
       .schema('shared')
       .from('users')
-      .select('is_admin, role')
+      .select('is_master_admin, tenant_id')
       .eq('id', userId)
       .single()
 
-    if (adminCheckError || !userData?.is_admin) {
+    let _isAdminCheck = userData?.is_master_admin ?? false
+    if (userData && !userData.is_master_admin) {
+      const { data: _rr } = await supabase.schema('docs').from('user_roles')
+        .select('role').eq('user_id', userId).eq('tenant_id', userData.tenant_id).single()
+      _isAdminCheck = ['tenant_admin', 'master_admin'].includes(_rr?.role ?? '')
+    }
+    if (adminCheckError || !_isAdminCheck) {
       logger.warn('Non-admin attempted to change user role', { userId, userEmail })
       return { success: false, error: 'Only administrators can change user roles' }
     }
@@ -351,11 +372,17 @@ export async function addUser(data: {
     const { data: userData } = await supabase
       .schema('shared')
       .from('users')
-      .select('is_admin, tenant_id, is_master_admin')
+      .select('is_master_admin, tenant_id')
       .eq('id', user.id)
       .single()
 
-    if (!userData?.is_admin) {
+    let _isAdminAdd = userData?.is_master_admin ?? false
+    if (userData && !userData.is_master_admin) {
+      const { data: _rr } = await supabase.schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id).eq('tenant_id', userData.tenant_id).single()
+      _isAdminAdd = ['tenant_admin', 'master_admin'].includes(_rr?.role ?? '')
+    }
+    if (!_isAdminAdd) {
       return { success: false, error: 'Only administrators can add users' }
     }
 
@@ -672,11 +699,17 @@ export async function importUsersFromCSV(csvData: string) {
     const { data: userData } = await supabase
       .schema('shared')
       .from('users')
-      .select('is_admin, tenant_id')
+      .select('is_master_admin, tenant_id')
       .eq('id', user.id)
       .single()
 
-    if (!userData?.is_admin) {
+    let _isAdminImport = userData?.is_master_admin ?? false
+    if (userData && !userData.is_master_admin) {
+      const { data: _rr } = await supabase.schema('docs').from('user_roles')
+        .select('role').eq('user_id', user.id).eq('tenant_id', userData.tenant_id).single()
+      _isAdminImport = ['tenant_admin', 'master_admin'].includes(_rr?.role ?? '')
+    }
+    if (!_isAdminImport) {
       return {
         success: false,
         error: 'Only administrators can import users',
