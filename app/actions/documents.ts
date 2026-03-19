@@ -90,7 +90,7 @@ export async function createDocument(formData: FormData) {
     }
 
     // Check write permission
-    const { allowed, role } = await checkWritePermission(supabase, userId)
+    const { allowed, role } = await checkWritePermission(supabase, userId!)
     if (!allowed) {
       logger.warn('User without write permission attempted to create document', {
         userId,
@@ -439,7 +439,7 @@ export async function updateDocument(
     userId = user.id
 
     // Check write permission
-    const { allowed, role } = await checkWritePermission(supabase, userId)
+    const { allowed, role } = await checkWritePermission(supabase, userId!)
     if (!allowed) {
       logger.warn('User without write permission attempted to update document', {
         userId,
@@ -684,7 +684,7 @@ export async function deleteDocument(
     userId = user.id
 
     // Check write permission
-    const { allowed, role } = await checkWritePermission(supabase, userId)
+    const { allowed, role } = await checkWritePermission(supabase, userId!)
     if (!allowed) {
       logger.warn('User without write permission attempted to delete document', {
         userId,

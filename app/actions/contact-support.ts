@@ -194,12 +194,12 @@ export async function submitContactForm(data: ContactFormData) {
               <div class="value">${userData?.is_master_admin ? 'Yes' : 'No'}</div>
               
               <div class="label">Category:</div>
-              <div class="value">${categoryLabels[validatedData.category]}</div>
+              <div class="value">${categoryLabels[validatedData.category as keyof typeof categoryLabels]}</div>
               
               <div class="label">Priority:</div>
               <div class="value">
                 <span class="badge badge-${validatedData.priority}">
-                  ${priorityLabels[validatedData.priority]}
+                  ${priorityLabels[validatedData.priority as keyof typeof priorityLabels]}
                 </span>
               </div>
             </div>
@@ -247,7 +247,7 @@ export async function submitContactForm(data: ContactFormData) {
       from: FROM_FEEDBACK_EMAIL,
       to: SUPPORT_EMAIL,
       replyTo: userData?.email || user.email || undefined,
-      subject: `[${tenantData?.subdomain || 'UNKNOWN'}] [${priorityLabels[validatedData.priority]}] ${categoryLabels[validatedData.category]} - ${validatedData.subject}`,
+      subject: `[${tenantData?.subdomain || 'UNKNOWN'}] [${priorityLabels[validatedData.priority as keyof typeof priorityLabels]}] ${categoryLabels[validatedData.category as keyof typeof categoryLabels]} - ${validatedData.subject}`,
       html: emailHtml
     })
 

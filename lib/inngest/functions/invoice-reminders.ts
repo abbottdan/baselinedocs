@@ -27,7 +27,7 @@ export const sendInvoiceReminders = inngest.createFunction(
     retries: 2,
   },
   { cron: '0 9 * * *' }, // Daily at 9am UTC
-  async ({ step }) => {
+  async ({ step }: { step: any }) => {
     console.log('[Inngest] Starting invoice reminder check')
 
     // Step 1: Get all active subscriptions

@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createPlatformClient } from '@/lib/supabase/platform'
 import { createClient } from '@supabase/supabase-js'
 import { buildDocumentUrl } from '@/lib/integrations/baselinereqs'
 import { logger } from '@/lib/logger'

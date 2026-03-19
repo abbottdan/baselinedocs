@@ -33,6 +33,8 @@ import { createClient } from '@supabase/supabase-js'
 import { buildDocumentUrl } from '@/lib/integrations/baselinereqs'
 import { logger } from '@/lib/logger'
 import { sanitizeHTML } from '@/lib/security/sanitize'
+import { createPlatformClient } from '@/lib/supabase/platform'
+import { createSharedClient } from '@/lib/supabase/server'
 
 function createServiceClient() {
   return createClient(
