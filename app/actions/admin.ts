@@ -31,7 +31,7 @@ export async function adminDeleteDocument(
           const sharedClient = createSharedClient()
       const { data: _su } = await sharedClient
         .schema('shared').from('users')
-        .select('is_master_admin, tenant_id')
+        .select('is_master_admin, tenant_id, email')
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
@@ -160,7 +160,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
           const sharedClient = createSharedClient()
       const { data: _su } = await sharedClient
         .schema('shared').from('users')
-        .select('is_master_admin, tenant_id')
+        .select('is_master_admin, tenant_id, email')
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
@@ -266,7 +266,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
           const sharedClient = createSharedClient()
       const { data: _su } = await sharedClient
         .schema('shared').from('users')
-        .select('is_master_admin, tenant_id')
+        .select('is_master_admin, tenant_id, email')
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
