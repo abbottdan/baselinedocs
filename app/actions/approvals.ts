@@ -73,6 +73,7 @@ export async function addApprover(documentId: string, userId: string, userEmail:
 
     // Check document ownership and status
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, created_by, status, tenant_id')
       .eq('id', documentId)
@@ -233,6 +234,7 @@ export async function removeApprover(documentId: string, approverId: string) {
 
     // Check document ownership and status
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, created_by, status')
       .eq('id', documentId)
@@ -400,6 +402,7 @@ export async function submitForApproval(documentId: string) {
 
     // Get document with approvers count
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*, approvers:approvers(count)')
       .eq('id', documentId)
@@ -449,6 +452,7 @@ export async function submitForApproval(documentId: string) {
     // Update document status - use service role client as RLS blocks status changes
     const supabaseAdmin = createServiceRoleClient()
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ status: 'In Approval' })
       .eq('id', documentId)
@@ -594,6 +598,7 @@ export async function approveDocument(documentId: string, comments?: string) {
 
     // Get document
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -728,6 +733,7 @@ export async function approveDocument(documentId: string, comments?: string) {
       // All approved - release the document - use service role client
       const supabaseAdmin = createServiceRoleClient()
       await supabaseAdmin
+        .schema('docs')
         .from('documents')
         .update({
           status: 'Released',
@@ -743,6 +749,7 @@ export async function approveDocument(documentId: string, comments?: string) {
       if (document.is_production && document.version === 'v1') {
         // Find last released prototype version
         const { data: lastPrototype } = await supabaseAdmin
+          .schema('docs')
           .from('documents')
           .select('id, version, status, tenant_id')
           .eq('document_number', document.document_number)
@@ -761,6 +768,7 @@ export async function approveDocument(documentId: string, comments?: string) {
           })
           
           await supabaseAdmin
+            .schema('docs')
             .from('documents')
             .update({ status: 'Obsolete' })
             .eq('id', lastPrototype.id)
@@ -801,6 +809,7 @@ export async function approveDocument(documentId: string, comments?: string) {
             })
 
             await supabaseAdmin
+              .schema('docs')
               .from('documents')
               .update({ status: 'Obsolete' })
               .eq('id', predecessor.id)
@@ -928,6 +937,7 @@ export async function rejectDocument(documentId: string, rejectionReason: string
 
     // Get document
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -998,6 +1008,7 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     // Return document to Draft status - use service role client
     const supabaseAdmin = createServiceRoleClient()
     const { error: updateDocError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ status: 'Draft' })
       .eq('id', documentId)
@@ -1192,6 +1203,7 @@ export async function withdrawFromApproval(documentId: string) {
 
     // Get document
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*, created_by')
       .eq('id', documentId)
@@ -1229,6 +1241,7 @@ export async function withdrawFromApproval(documentId: string) {
     // Return to Draft status
     const supabaseAdmin = createServiceRoleClient()
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ status: 'Draft' })
       .eq('id', documentId)

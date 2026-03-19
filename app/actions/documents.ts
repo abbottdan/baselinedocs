@@ -171,6 +171,7 @@ export async function createDocument(formData: FormData) {
 
     // Get document type for prefix and number (verify it's in this tenant)
     const { data: docType, error: typeError } = await supabase
+      .schema('docs')
       .from('document_types')
       .select('prefix, next_number')
       .eq('id', data.document_type_id)
@@ -202,6 +203,7 @@ export async function createDocument(formData: FormData) {
 
     // Create document
     const { data: document, error: createError } = await supabase
+      .schema('docs')
       .from('documents')
       .insert({
         document_type_id: data.document_type_id,
@@ -270,6 +272,7 @@ export async function createDocument(formData: FormData) {
 
     // Increment document type counter
     await supabase
+      .schema('docs')
       .from('document_types')
       .update({ next_number: docType.next_number + 1 })
       .eq('id', data.document_type_id)
@@ -293,6 +296,7 @@ export async function createDocument(formData: FormData) {
 
           // Upload to storage
           const { error: uploadError } = await supabase.storage
+            .schema('docs')
             .from('documents')
             .upload(filePath, file)
 
@@ -485,6 +489,7 @@ export async function updateDocument(
 
     // Get document to check ownership and status
     const { data: document, error: getError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -515,6 +520,7 @@ export async function updateDocument(
 
     // Update document
     const { error: updateError } = await supabase
+      .schema('docs')
       .from('documents')
       .update({
         title: title,
@@ -565,6 +571,7 @@ export async function updateDocument(
           const filePath = `${subdomain}/${document.document_number}${document.version}/${fileName}`
 
           const { error: uploadError } = await supabase.storage
+            .schema('docs')
             .from('documents')
             .upload(filePath, file)
 
@@ -704,6 +711,7 @@ export async function deleteDocument(
 
     // Get document to check ownership and status
     const { data: document, error: getError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*, document_files(*)')
       .eq('id', documentId)
@@ -751,6 +759,7 @@ export async function deleteDocument(
     // BUSINESS RULE: Document numbers are permanent once created
     // A draft can only be deleted if there's a Released or Obsolete version
     const { data: otherVersions, error: versionCheckError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, version, status')
       .eq('document_number', document.document_number)
@@ -824,6 +833,7 @@ export async function deleteDocument(
       })
 
       const { error: storageError } = await supabase.storage
+        .schema('docs')
         .from('documents')
         .remove(filePaths)
 
@@ -867,6 +877,7 @@ export async function deleteDocument(
     // Delete document (cascade will remove document_files records)
     // Note: audit_log entries will have document_id set to NULL (preserved via ON DELETE SET NULL)
     const { error: deleteError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .delete()
       .eq('id', documentId)
@@ -973,6 +984,7 @@ export async function deleteFile(documentId: string, fileId: string) {
 
     // Delete from storage
     const { error: storageError } = await supabase.storage
+      .schema('docs')
       .from('documents')
       .remove([file.file_path])
 
@@ -1086,6 +1098,7 @@ export async function releaseDocument(documentId: string) {
 
     // Get document with approvers count
     const { data: document, error: getError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*, approvers:approvers(count)')
       .eq('id', documentId)
@@ -1142,6 +1155,7 @@ export async function releaseDocument(documentId: string) {
     // Update document to Released - use service role client as RLS might block status changes
     const supabaseAdmin = createServiceRoleClient()
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({
         status: 'Released',
@@ -1182,6 +1196,7 @@ export async function releaseDocument(documentId: string) {
         })
 
         await supabaseAdmin
+          .schema('docs')
           .from('documents')
           .update({ status: 'Obsolete' })
           .eq('id', predecessor.id)

@@ -111,6 +111,7 @@ export default async function BillingPage() {
 
   // Get document count
   const { count: documentCount } = await supabaseAdmin
+    .schema('docs')
     .from('documents')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantData.id)

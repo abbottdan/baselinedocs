@@ -56,6 +56,7 @@ export async function promoteToProduction(
 
     // Fetch source Prototype document
     const { data: prototypeDoc, error: fetchError } = await supabase
+      .schema('docs')
       .from('documents')
       .select(`
         id,
@@ -117,6 +118,7 @@ export async function promoteToProduction(
 
         // Check if Production v1 already exists
     const { data: existingProduction, error: checkError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, version, status')
       .eq('document_number', prototypeDoc.document_number)
@@ -152,6 +154,7 @@ export async function promoteToProduction(
     if (mode === 'discard' || mode === 'convert') {
       // Find existing prototype draft
       const { data: existingDraft } = await supabase
+        .schema('docs')
         .from('documents')
         .select('id, version, tenant_id')
         .eq('document_number', prototypeDoc.document_number)
@@ -163,6 +166,7 @@ export async function promoteToProduction(
         // Convert this draft to production
         const supabaseAdmin = createServiceRoleClient()
         const { error: updateError } = await supabaseAdmin
+          .schema('docs')
           .from('documents')
           .update({ 
             is_production: true,
@@ -217,6 +221,7 @@ export async function promoteToProduction(
       if (mode === 'discard' && existingDraft) {
         // Delete the existing draft
         const { error: deleteError } = await supabase
+          .schema('docs')
           .from('documents')
           .delete()
           .eq('id', existingDraft.id)
@@ -243,6 +248,7 @@ export async function promoteToProduction(
 
     // Create new Production document at v1
     const { data: productionDoc, error: insertError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .insert({
         document_type_id: prototypeDoc.document_type_id,
@@ -403,6 +409,7 @@ export async function canPromoteToProduction(documentId: string) {
 
     // Fetch document
     const { data: doc, error: fetchError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, document_number, version, status, is_production, created_by')
       .eq('id', documentId)
@@ -445,6 +452,7 @@ export async function canPromoteToProduction(documentId: string) {
 
     // Check: Production v1 doesn't already exist
     const { data: existingProduction } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_number', doc.document_number)

@@ -34,6 +34,7 @@ export async function searchDocuments(
 
   // Build base query with joins for related data
   let query = supabase
+    .schema('docs')
     .from('documents')
     .select(`
       id,

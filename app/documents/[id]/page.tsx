@@ -1,4 +1,4 @@
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { fetchDocumentVersions } from '@/lib/document-helpers'
 import { getSubdomainTenantId, getCurrentSubdomain } from '@/lib/tenant'
@@ -62,6 +62,7 @@ export default async function DocumentDetailPage({ params }: PageProps) {
 
   // Fetch the document to get its document_number
   const { data: document } = await supabase
+    .schema('docs')
     .from('documents')
     .select('document_number, tenant_id')
     .eq('id', params.id)

@@ -63,6 +63,7 @@ export async function createNewVersion(sourceDocumentId: string) {
 
     // Fetch source document with all needed info
     const { data: sourceDoc, error: fetchError } = await supabase
+      .schema('docs')
       .from('documents')
       .select(`
         id,
@@ -138,6 +139,7 @@ export async function createNewVersion(sourceDocumentId: string) {
 
     // Check if next version already exists
     const { data: existingVersion, error: checkError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, version')
       .eq('document_number', sourceDoc.document_number)
@@ -171,6 +173,7 @@ export async function createNewVersion(sourceDocumentId: string) {
     // Use service role client to bypass RLS for this legitimate admin operation
     const adminClient = createServiceRoleClient()
     const { data: newVersion, error: insertError } = await adminClient
+      .schema('docs')
       .from('documents')
       .insert({
         document_type_id: sourceDoc.document_type_id,
@@ -299,6 +302,7 @@ export async function markPreviousVersionObsolete(
 
     // Get all versions of this document
     const { data: allVersions, error: fetchError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, version, status, is_production, tenant_id')
       .eq('document_number', documentNumber)
@@ -355,6 +359,7 @@ export async function markPreviousVersionObsolete(
 
     // Mark previous version as Obsolete
     const { error: updateError } = await supabase
+      .schema('docs')
       .from('documents')
       .update({ status: 'Obsolete' })
       .eq('id', previousVersion.id)
@@ -453,6 +458,7 @@ export async function getDocumentVersions(documentNumber: string) {
     })
 
     const { data: versions, error } = await supabase
+      .schema('docs')
       .from('documents')
       .select(`
         id,
@@ -515,6 +521,7 @@ export async function getLatestReleasedVersion(documentNumber: string) {
   const supabase = await createClient()
 
   const { data, error } = await supabase
+    .schema('docs')
     .from('documents')
     .select('*')
     .eq('document_number', documentNumber)
@@ -535,6 +542,7 @@ export async function getVersionHistory(documentNumber: string) {
 
   try {
     const { data, error } = await supabase
+      .schema('docs')
       .from('documents')
       .select(`
         *,
@@ -595,6 +603,7 @@ export async function getImmediatePredecessor(documentNumber: string, currentVer
 
     // Query for the predecessor version
     const { data, error } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('document_number', documentNumber)

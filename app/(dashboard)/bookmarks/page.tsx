@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Bookmark } from 'lucide-react'
 import BookmarksListClient from './BookmarksListClient'
@@ -51,6 +51,7 @@ export default async function BookmarksPage() {
 
   // Get latest Released version for each bookmarked document
   const { data: documents } = await supabase
+    .schema('docs')
     .from('documents')
     .select(`
       *,

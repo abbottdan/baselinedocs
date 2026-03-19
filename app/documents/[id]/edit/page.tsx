@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +28,7 @@ export default async function EditDocumentPage({ params }: PageProps) {
 
   // Get document with approvers
   const { data: document, error } = await supabase
+    .schema('docs')
     .from('documents')
     .select(`
       *,

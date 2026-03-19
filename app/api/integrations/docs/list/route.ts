@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
   // In Approval is also excluded — those are transitional and will become
   // Released shortly anyway.
   let dbQuery = supabase
+    .schema('docs')
     .from('documents')
     .select('id, title, document_number, version, status, updated_at')
     .eq('tenant_id', tenant.id)

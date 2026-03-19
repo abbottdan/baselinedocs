@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import NewDocumentForm from '../../../documents/new/NewDocumentForm'
@@ -35,6 +35,7 @@ export default async function NewDocumentPage() {
 
   // Get active document types for THIS TENANT
   const { data: documentTypes, error: typesError } = await supabase
+    .schema('docs')
     .from('document_types')
     .select('*')
     .eq('tenant_id', tenantId)  // ✅ Filter by subdomain's tenant

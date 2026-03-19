@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
+import { getSubdomainTenantId } from '@/lib/tenant'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
 
   // ── Fetch active document types ───────────────────────────────────────────
   const { data, error } = await supabase
+    .schema('docs')
     .from('document_types')
     .select('id, name, prefix, description')
     .eq('tenant_id', tenant.id)

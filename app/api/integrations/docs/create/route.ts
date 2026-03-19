@@ -34,7 +34,8 @@ import { buildDocumentUrl } from '@/lib/integrations/baselinereqs'
 import { logger } from '@/lib/logger'
 import { sanitizeHTML } from '@/lib/security/sanitize'
 import { createPlatformClient } from '@/lib/supabase/platform'
-import { createSharedClient } from '@/lib/supabase/server'
+import { getSubdomainTenantId } from '@/lib/tenant'
+import { createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 
 function createServiceClient() {
   return createClient(
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
 
   // ── Validate document type belongs to this tenant ─────────────────────────
   const { data: docType, error: typeError } = await supabase
+    .schema('docs')
     .from('document_types')
     .select('id, prefix, next_number, is_active')
     .eq('id', documentTypeId)
@@ -159,6 +161,7 @@ export async function POST(req: NextRequest) {
 
   // ── Insert document ───────────────────────────────────────────────────────
   const { data: document, error: createError } = await supabase
+    .schema('docs')
     .from('documents')
     .insert({
       document_type_id: documentTypeId,
@@ -187,6 +190,7 @@ export async function POST(req: NextRequest) {
   // with existing behaviour. Race conditions here would produce a gap in
   // numbering, not a duplicate (unique constraint protects against that).
   await supabase
+    .schema('docs')
     .from('document_types')
     .update({ next_number: docType.next_number + 1 })
     .eq('id', documentTypeId)

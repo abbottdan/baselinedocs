@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Get document info
     const { data: document } = await supabase
+      .schema('docs')
       .from('documents')
       .select('document_number, version, status')
       .eq('id', documentId)
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase
       .storage
+      .schema('docs')
       .from('documents')
       .upload(filePath, fileBuffer, {
         contentType: file.type,

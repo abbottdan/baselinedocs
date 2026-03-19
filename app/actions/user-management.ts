@@ -115,6 +115,7 @@ export async function getAllUsers() {
     const usersWithStats = await Promise.all(
       (users || []).map(async (u) => {
         const { count: docCount } = await supabase
+          .schema('docs')
           .from('documents')
           .select('id', { count: 'exact', head: true })
           .eq('created_by', u.id)
@@ -398,6 +399,7 @@ export async function addUser(data: {
       .schema('platform')
       .from('product_subscriptions')
       .select('plan, user_limit')
+      .eq('product', 'baselinedocs')
       .eq('tenant_id', targetTenantId)
       .eq('product', 'baselinedocs')
       .single()

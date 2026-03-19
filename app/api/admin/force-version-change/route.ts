@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Get current document
     const { data: document } = await supabase
+      .schema('docs')
       .from('documents')
       .select('version, document_number, is_production')
       .eq('id', documentId)
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
 
     // Check for conflicts with existing versions
     const { data: existingVersion } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_number', document.document_number)
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Update document version
     const { error: updateError } = await supabase
+      .schema('docs')
       .from('documents')
       .update({ 
         version: newVersion,

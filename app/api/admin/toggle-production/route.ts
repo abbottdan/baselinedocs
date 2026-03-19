@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
 
     // Get current document
     const { data: document } = await supabase
+      .schema('docs')
       .from('documents')
       .select('is_production, document_number, version')
       .eq('id', documentId)
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Update document production status
     const { error: updateError } = await supabase
+      .schema('docs')
       .from('documents')
       .update({ 
         is_production: isProduction,

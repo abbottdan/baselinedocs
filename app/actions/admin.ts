@@ -49,6 +49,7 @@ export async function adminDeleteDocument(
 
     // Get document info before deletion (for audit log)
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -106,6 +107,7 @@ export async function adminDeleteDocument(
     if (files && files.length > 0) {
       const filePaths = files.map(f => f.file_path)
       await supabase.storage
+        .schema('docs')
         .from('documents')
         .remove(filePaths)
     }
@@ -113,6 +115,7 @@ export async function adminDeleteDocument(
     // Delete document (cascade will handle document_files and approvers)
     // Audit log will remain due to ON DELETE SET NULL on document_id
     const { error: deleteError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .delete()
       .eq('id', documentId)
@@ -190,6 +193,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
 
     // Get current document info
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, document_number, version, created_by, tenant_id')
       .eq('id', documentId)
@@ -217,6 +221,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
 
     // Update document owner
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ created_by: newOwner.id })
       .eq('id', documentId)
@@ -298,6 +303,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
 
     // Get current document info
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('document_number, version, tenant_id')
       .eq('id', documentId)
@@ -309,6 +315,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
 
     // Check if new number already exists
     const { data: existing } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_number', newNumber)
@@ -323,6 +330,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
 
     // Update document number
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ document_number: newNumber })
       .eq('id', documentId)

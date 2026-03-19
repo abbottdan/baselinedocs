@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import { revalidatePath } from 'next/cache'
 
@@ -119,6 +119,7 @@ export async function getBookmarkedDocuments() {
     // Get latest Released version for each bookmarked document number
     // We need to find the most recent Released document for each document_number
     const { data: documents, error: docsError } = await supabase
+      .schema('docs')
       .from('documents')
       .select(`
         *,

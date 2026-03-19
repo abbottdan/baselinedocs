@@ -1,5 +1,5 @@
 // lib/document-helpers.ts
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 import { getSubdomainTenantId } from '@/lib/tenant'
 
 export interface DocumentVersion {
@@ -60,6 +60,7 @@ export async function fetchDocumentVersions(
 
   // Fetch all versions of this document within the subdomain's tenant
   const { data: versions, error } = await supabase
+    .schema('docs')
     .from('documents')
     .select(`
       *,
@@ -165,6 +166,7 @@ export async function fetchSpecificVersion(
   if (!tenantId) return null
 
   const { data, error } = await supabase
+    .schema('docs')
     .from('documents')
     .select(`
       *,

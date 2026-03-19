@@ -28,6 +28,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
 
     // Get document to check ownership and status
     const { data: document, error: getError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -64,6 +65,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
 
     // Update document metadata
     const { error: updateError } = await supabase
+      .schema('docs')
       .from('documents')
       .update({
         title,
@@ -138,6 +140,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
         // Upload to Supabase Storage (use service role to bypass RLS)
         const supabaseAdmin = createServiceRoleClient()
         const { error: uploadError } = await supabaseAdmin.storage
+          .schema('docs')
           .from('documents')
           .upload(fileName, fileBuffer, {
             contentType: file.type,

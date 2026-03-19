@@ -459,6 +459,7 @@ export async function deleteDocumentType(id: string) {
 
     // Check if any documents use this type
     const { data: documents, error: checkError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_type_id', id)
@@ -853,6 +854,7 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
 
     // Check if any documents exist for this type
     const { count, error: countError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id', { count: 'exact', head: true })
       .eq('document_type_id', documentTypeId)

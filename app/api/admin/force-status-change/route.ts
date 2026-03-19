@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Get document info
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, document_number, version, status, tenant_id')
       .eq('id', documentId)
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createServiceRoleClient()
     
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ status: newStatus })
       .eq('id', documentId)

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
@@ -39,6 +39,7 @@ export async function GET(
 
     // Generate signed URL (valid for 1 hour)
     const { data: signedUrlData, error: urlError } = await supabase.storage
+      .schema('docs')
       .from('documents')
       .createSignedUrl(file.file_path, 3600)
 

@@ -48,6 +48,7 @@ export default function VersionHistory({ documentNumber, currentVersionId }: Ver
       const supabase = createClient()
       
       const { data, error } = await supabase
+        .schema('docs')
         .from('documents')
         .select('id, version, status, released_at, released_by')
         .eq('document_number', documentNumber)

@@ -1,4 +1,4 @@
-import { createClient, createSharedClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import Link from 'next/link'
@@ -51,6 +51,7 @@ export default async function DashboardPage() {
 
   // Get total documents count (filtered by subdomain tenant)
   const { count: totalDocuments } = await supabase
+    .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
@@ -68,6 +69,7 @@ export default async function DashboardPage() {
 
   // Get my documents (documents I created in this tenant)
   const { count: myDocumentsCount } = await supabase
+    .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })
     .eq('created_by', user.id)
@@ -75,6 +77,7 @@ export default async function DashboardPage() {
 
   // Get released documents count (in this tenant)
   const { count: releasedDocumentsCount } = await supabase
+    .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'Released')

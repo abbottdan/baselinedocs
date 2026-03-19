@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 export interface AuditLogEntry {
   id: string
@@ -28,6 +28,7 @@ export async function getDocumentAuditLog(documentId: string) {
 
     // First, get the document to find its document_number
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('document_number')
       .eq('id', documentId)
@@ -39,6 +40,7 @@ export async function getDocumentAuditLog(documentId: string) {
 
     // Get all documents with this document_number (all versions)
     const { data: allVersions, error: versionsError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_number', document.document_number)

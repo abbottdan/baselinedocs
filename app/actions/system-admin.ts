@@ -2,6 +2,7 @@
  * app/actions/system-admin.ts
  * CHANGED: All DB lookups migrated to new schema structure.
  *   - tenants  → createPlatformClient().schema('platform').from('tenants')
+ .schema('shared')
  *   - users    → createSharedClient().schema('shared').from('users')
  *   - tenant_billing → platform.product_subscriptions
  *   - billing_history → platform.billing_history

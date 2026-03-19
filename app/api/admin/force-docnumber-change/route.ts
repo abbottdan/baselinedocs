@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
 
     // Get document info
     const { data: document, error: docError } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id, document_number, version, tenant_id')
       .eq('id', documentId)
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
 
     // Check if new number already exists (for any version)
     const { data: existing } = await supabase
+      .schema('docs')
       .from('documents')
       .select('id')
       .eq('document_number', newDocNumber)
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createServiceRoleClient()
     
     const { error: updateError } = await supabaseAdmin
+      .schema('docs')
       .from('documents')
       .update({ document_number: newDocNumber })
       .eq('id', documentId)
