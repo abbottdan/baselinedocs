@@ -1,11 +1,5 @@
 /**
  * middleware.ts — BaselineDocs
- *
- * CHANGED:
- *  - Tenant lookup uses createPlatformClient() (platform.tenants)
- *  - User lookup uses createSharedClient() with explicit .schema('shared')
- *    NOTE: db.schema in the supabase-js constructor is ignored for the base
- *    client — .schema() must be chained on the query itself.
  */
 
 import { NextResponse } from 'next/server'
@@ -15,6 +9,7 @@ import { createPlatformClient } from '@/lib/supabase/platform'
 
 const COOKIE_DOMAIN = '.baselinedocs.com'
 const APP_DOMAIN    = 'baselinedocs.com'
+const PRODUCT_SCHEMA = 'docs'
 
 function extractSubdomain(hostname: string): string {
   const host      = hostname.split(':')[0]
@@ -70,24 +65,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // .schema('shared') must be chained on the query — the db.schema constructor
-  // option is silently ignored by the base @supabase/supabase-js client.
+  // shared.users has: id, tenant_id, is_master_admin, is_active, full_name, email
+  // NOTE: no 'role' column — role lives in docs.user_roles
   const sharedClient = createSharedClient()
   const { data: userData, error: userError } = await sharedClient
     .schema('shared')
     .from('users')
-    .select('tenant_id, is_master_admin, is_active, role')
+    .select('tenant_id, is_master_admin, is_active')
     .eq('id', user.id)
     .single()
 
-  // TEMPORARY DEBUG — remove after confirming
-console.log('[Debug] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(-20))
-console.log('[Debug] userError code:', userError?.code)
-console.log('[Debug] userError message:', userError?.message)
-console.log('[Debug] userData:', userData ? 'found' : 'null')
-
   if (!userData || userError) {
-    console.log('[Middleware] User not found in shared.users:', user.email)
+    console.log('[Middleware] User not found in shared.users:', user.email, userError?.message)
     const redirectUrl = new URL('/auth/error', request.url)
     redirectUrl.searchParams.set('message', 'Account setup incomplete. Please contact support.')
     return NextResponse.redirect(redirectUrl)
@@ -105,12 +94,13 @@ console.log('[Debug] userData:', userData ? 'found' : 'null')
     return NextResponse.redirect(redirectUrl)
   }
 
+  // Master admins bypass subdomain verification
   if (userData.is_master_admin) {
     console.log('[Middleware] Master admin — access granted')
     return response
   }
 
-    // Resolve the user home tenant subdomain from the platform DB.
+  // Resolve user's home tenant subdomain from the platform DB
   const platform = createPlatformClient()
   const { data: tenant } = await platform
     .schema('platform')
@@ -133,14 +123,26 @@ console.log('[Debug] userData:', userData ? 'found' : 'null')
     redirectUrl.searchParams.set('message', `You belong to ${userTenantSubdomain}.${APP_DOMAIN}`)
     return NextResponse.redirect(redirectUrl)
   }
-  
+
   console.log('[Middleware] Tenant match — access granted')
 
+  // Route guards — fetch role from docs.user_roles only when needed
   if (pathname.startsWith('/system-admin')) {
+    // Only master_admin can access system-admin; already handled above
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
+
   if (pathname.startsWith('/admin')) {
-    if (!['tenant_admin', 'master_admin'].includes(userData.role ?? '')) {
+    // Check role in the product schema
+    const { data: roleRow } = await supabase
+      .schema(PRODUCT_SCHEMA)
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('tenant_id', userData.tenant_id)
+      .single()
+
+    if (!['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
