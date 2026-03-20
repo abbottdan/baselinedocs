@@ -57,7 +57,8 @@ export default async function DashboardPage() {
     .eq('tenant_id', tenantId)
 
   // Get documents pending approval (where I'm an approver with Pending status and document is In Approval)
-  const { data: pendingApprovals } = await supabase
+  const { data: pendingApprovals } = await createServiceRoleClient()
+    .schema('docs')
     .from('approvers')
     .select('document_id, document:documents!inner(status, tenant_id)')
     .eq('user_email', user.email)

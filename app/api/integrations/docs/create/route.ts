@@ -196,11 +196,11 @@ export async function POST(req: NextRequest) {
     .eq('id', documentTypeId)
 
   // ── Audit log ─────────────────────────────────────────────────────────────
-  await supabase
+  await createServiceRoleClient()
+    .schema('docs')
     .from('audit_log')
     .insert({
       document_id: document.id,
-      document_number: documentNumber,
       action: 'created',
       performed_by: user.id,
       performed_by_email: user.email,

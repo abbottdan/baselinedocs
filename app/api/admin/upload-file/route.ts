@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create document_files record
-    const { error: dbError } = await supabase
+    const { error: dbError } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .insert({
         document_id: documentId,
@@ -115,7 +116,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create audit log entry
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -126,7 +128,6 @@ export async function POST(request: NextRequest) {
           file_name: file.name,
           file_size: file.size,
           admin_action: true,
-          document_number: document.document_number,
           version: document.version,
           document_status: document.status,
         },

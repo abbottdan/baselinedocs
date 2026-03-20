@@ -166,6 +166,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
 
         // Create file record
         const { data: fileRecord, error: fileError } = await supabaseAdmin
+          .schema('docs')
           .from('document_files')
           .insert({
             document_id: documentId,

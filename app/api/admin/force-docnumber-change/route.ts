@@ -88,10 +88,10 @@ export async function POST(request: NextRequest) {
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
-        document_id: documentId,
-        document_number: newDocNumber, // Use new number
+        document_id: documentId, // Use new number
         version: document.version,
         action: 'admin_rename',
         performed_by: user.id,

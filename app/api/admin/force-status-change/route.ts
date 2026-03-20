@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,

@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get file info
-    const { data: file } = await supabase
+    const { data: file } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .select('file_path, original_file_name, document_id')
       .eq('id', fileId)
@@ -89,7 +90,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete from database
-    const { error: dbError } = await supabase
+    const { error: dbError } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .delete()
       .eq('id', fileId)
@@ -104,7 +106,8 @@ export async function POST(request: NextRequest) {
 
     // Create audit log entry
     if (document) {
-      await supabase
+      await createServiceRoleClient()
+        .schema('docs')
         .from('audit_log')
         .insert({
           document_id: documentId,

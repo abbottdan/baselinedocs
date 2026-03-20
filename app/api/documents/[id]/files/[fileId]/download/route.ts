@@ -15,7 +15,8 @@ export async function GET(
     }
 
     // Get file metadata
-    const { data: file, error: fileError } = await supabase
+    const { data: file, error: fileError } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .select('*, document:documents(id, status, created_by)')
       .eq('id', params.fileId)

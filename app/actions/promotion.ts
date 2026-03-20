@@ -191,6 +191,7 @@ export async function promoteToProduction(
 
         // Create audit log
         await supabaseAdmin
+          .schema('docs')
           .from('audit_log')
           .insert({
             document_id: existingDraft.id,
@@ -278,6 +279,7 @@ export async function promoteToProduction(
 
     // Create audit log for new Production document
     const { error: auditNewError } = await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: productionDoc.id,
@@ -289,7 +291,6 @@ export async function promoteToProduction(
           source_prototype_id: prototypeDocumentId,
           source_version: prototypeDoc.version,
           production_version: 'v1',
-          document_number: prototypeDoc.document_number,
           promotion_date: new Date().toISOString()
         }
       })
@@ -305,6 +306,7 @@ export async function promoteToProduction(
 
     // Create audit log for source Prototype (reference)
     const { error: auditSourceError } = await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: prototypeDocumentId,
@@ -315,7 +317,6 @@ export async function promoteToProduction(
         details: {
           promoted_to_id: productionDoc.id,
           production_version: 'v1',
-          document_number: prototypeDoc.document_number
         }
       })
 
@@ -511,7 +512,8 @@ export async function getPromotionHistory(documentNumber: string) {
     })
 
     // Get all promotion audit logs for this document number
-    const { data: promotions, error } = await supabase
+    const { data: promotions, error } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .select(`
         id,

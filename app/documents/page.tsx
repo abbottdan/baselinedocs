@@ -99,6 +99,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
 
   // Calculate current storage (use admin to bypass RLS)
   const { data: files } = await supabaseAdmin
+    .schema('docs')
     .from('document_files')
     .select('file_size, documents!inner(tenant_id)')
     .eq('documents.tenant_id', tenantId)

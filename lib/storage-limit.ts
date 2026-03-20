@@ -60,6 +60,7 @@ export async function checkStorageLimit(
 
   // Calculate current storage usage (use admin client to bypass RLS)
   const { data: files } = await supabaseAdmin
+    .schema('docs')
     .from('document_files')
     .select('file_size, documents!inner(tenant_id)')
     .eq('documents.tenant_id', tenantId)

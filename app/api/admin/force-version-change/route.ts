@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create audit log entry
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -110,7 +111,6 @@ export async function POST(request: NextRequest) {
           old_version: document.version,
           new_version: newVersion,
           admin_action: true,
-          document_number: document.document_number,
           is_production: document.is_production,
         },
       })

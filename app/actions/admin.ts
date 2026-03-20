@@ -82,6 +82,7 @@ export async function adminDeleteDocument(
 
     // Create audit log BEFORE deletion (critical for record keeping)
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -99,7 +100,8 @@ export async function adminDeleteDocument(
       })
 
     // Delete associated files from storage
-    const { data: files } = await supabase
+    const { data: files } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .select('file_path')
       .eq('document_id', documentId)
@@ -232,10 +234,10 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
-        document_number: document.document_number,
         version: document.version,
         action: 'admin_change_owner',
         performed_by: user.id,
@@ -341,6 +343,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,

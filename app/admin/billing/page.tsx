@@ -94,6 +94,7 @@ export default async function BillingPage() {
 
   // Get storage usage (use admin client to bypass RLS)
   const { data: storageData } = await supabaseAdmin
+    .schema('docs')
     .from('document_files')
     .select('file_size, documents!inner(tenant_id)')
     .eq('documents.tenant_id', tenantData.id)

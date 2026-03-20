@@ -203,7 +203,8 @@ export async function createNewVersion(sourceDocumentId: string) {
     }
 
     // Create audit log entry
-    const { error: auditError } = await supabase
+    const { error: auditError } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: newVersion.id,
@@ -215,7 +216,6 @@ export async function createNewVersion(sourceDocumentId: string) {
           source_document_id: sourceDocumentId,
           source_version: sourceDoc.version,
           new_version: nextVersion,
-          document_number: sourceDoc.document_number
         }
       })
 
@@ -379,7 +379,8 @@ export async function markPreviousVersionObsolete(
     const userEmail = user?.email || ''
 
     // Create audit log entry
-    const { error: auditError } = await supabase
+    const { error: auditError } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: previousVersion.id,
@@ -390,7 +391,6 @@ export async function markPreviousVersionObsolete(
         details: {
           obsoleted_version: previousVersion.version,
           new_released_version: currentVersion,
-          document_number: documentNumber,
           reason: 'Newer version released'
         }
       })

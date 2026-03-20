@@ -94,7 +94,8 @@ export default async function DocumentDetailPage({ params }: PageProps) {
       .order('full_name')
 
   // Fetch audit logs for ALL versions of this document (cross-version history)
-  const { data: auditLogs, error: auditError } = await supabase
+  const { data: auditLogs, error: auditError } = await createServiceRoleClient()
+    .schema('docs')
     .from('audit_log')
     .select('*')
     .eq('tenant_id', document.tenant_id)

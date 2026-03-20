@@ -56,7 +56,8 @@ export async function getDocumentAuditLog(documentId: string) {
     }
 
     // Fetch audit logs for all versions of this document
-    const { data: logs, error: logsError } = await supabase
+    const { data: logs, error: logsError } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .select('*')
       .in('document_id', documentIds)

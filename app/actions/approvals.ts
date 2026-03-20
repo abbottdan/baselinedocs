@@ -107,7 +107,8 @@ export async function addApprover(documentId: string, userId: string, userEmail:
     }
 
     // Check if approver already exists
-    const { data: existing } = await supabase
+    const { data: existing } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('id')
       .eq('document_id', documentId)
@@ -128,6 +129,7 @@ export async function addApprover(documentId: string, userId: string, userEmail:
 
     // Add approver
     const { error: insertError } = await supabaseAdmin
+      .schema('docs')
       .from('approvers')
       .insert({
         document_id: documentId,
@@ -156,6 +158,7 @@ export async function addApprover(documentId: string, userId: string, userEmail:
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -270,7 +273,8 @@ export async function removeApprover(documentId: string, approverId: string) {
     }
 
     // Get approver details before deleting (for audit log and verification)
-    const { data: approver, error: approverError } = await supabase
+    const { data: approver, error: approverError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('user_email, document_id, tenant_id')
       .eq('id', approverId)
@@ -297,7 +301,8 @@ export async function removeApprover(documentId: string, approverId: string) {
     }
 
     // Remove approver - use regular client (RLS should allow creator to delete)
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .delete()
       .eq('id', approverId)
@@ -313,7 +318,8 @@ export async function removeApprover(documentId: string, approverId: string) {
     }
 
     // Verify deletion succeeded
-    const { data: stillExists } = await supabase
+    const { data: stillExists } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('id')
       .eq('id', approverId)
@@ -336,7 +342,8 @@ export async function removeApprover(documentId: string, approverId: string) {
     })
 
     // Create audit log
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -467,7 +474,8 @@ export async function submitForApproval(documentId: string) {
     }
 
     // Reset all approvers to Pending (important for resubmissions after rejection)
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .update({
         status: 'Pending',
@@ -493,10 +501,10 @@ export async function submitForApproval(documentId: string) {
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
-        document_number: document.document_number,
         version: document.version,
         action: 'submitted_for_approval',
         performed_by: user.id,
@@ -524,7 +532,8 @@ export async function submitForApproval(documentId: string) {
     // Send email notifications to all approvers
     try {
       // Fetch approvers for this document
-      const { data: approversList } = await supabase
+      const { data: approversList } = await createServiceRoleClient()
+        .schema('docs')
         .from('approvers')
         .select('user_id, user_email')
         .eq('document_id', documentId)
@@ -623,7 +632,8 @@ export async function approveDocument(documentId: string, comments?: string) {
     }
 
     // Check if user is an approver
-    const { data: approver, error: approverError } = await supabase
+    const { data: approver, error: approverError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('*')
       .eq('document_id', documentId)
@@ -648,7 +658,8 @@ export async function approveDocument(documentId: string, comments?: string) {
     }
 
     // Update approver status
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .update({
         status: 'Approved',
@@ -682,7 +693,8 @@ export async function approveDocument(documentId: string, comments?: string) {
     })
 
     // Create audit log
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -697,7 +709,8 @@ export async function approveDocument(documentId: string, comments?: string) {
       })
 
     // Check if all approvers have approved by querying directly
-    const { data: approvers, error: approversError } = await supabase
+    const { data: approvers, error: approversError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('status')
       .eq('document_id', documentId)
@@ -775,6 +788,7 @@ export async function approveDocument(documentId: string, comments?: string) {
           
           // Log obsolescence
           await supabaseAdmin
+            .schema('docs')
             .from('audit_log')
             .insert({
               document_id: lastPrototype.id,
@@ -816,6 +830,7 @@ export async function approveDocument(documentId: string, comments?: string) {
 
             // Log obsolescence
             await supabaseAdmin
+              .schema('docs')
               .from('audit_log')
               .insert({
                 document_id: predecessor.id,
@@ -841,6 +856,7 @@ export async function approveDocument(documentId: string, comments?: string) {
 
       // Create release audit log
       await supabaseAdmin
+        .schema('docs')
         .from('audit_log')
         .insert({
           document_id: documentId,
@@ -962,7 +978,8 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     }
 
     // Check if user is an approver
-    const { data: approver, error: approverError } = await supabase
+    const { data: approver, error: approverError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select('*')
       .eq('document_id', documentId)
@@ -987,7 +1004,8 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     }
 
     // Update approver status
-    const { error: updateApproverError } = await supabase
+    const { error: updateApproverError } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .update({
         status: 'Rejected',
@@ -1023,7 +1041,8 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     }
 
     // Reset all other approvers to Pending (for resubmission)
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .update({
         status: 'Pending',
@@ -1043,7 +1062,8 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     })
 
     // Create audit log
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -1132,7 +1152,8 @@ export async function getMyApprovals() {
     logger.debug('Fetching approvals', { userId, action: 'getMyApprovals' })
 
     // Get all approvals for current user
-    const { data: approvals, error } = await supabase
+    const { data: approvals, error } = await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .select(`
         *,
@@ -1256,7 +1277,8 @@ export async function withdrawFromApproval(documentId: string) {
     }
 
     // Reset all approvers to Pending
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('approvers')
       .update({
         status: 'Pending',
@@ -1267,6 +1289,7 @@ export async function withdrawFromApproval(documentId: string) {
 
     // Create audit log
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,

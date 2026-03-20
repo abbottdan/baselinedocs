@@ -16,7 +16,8 @@ export default async function BookmarksPage() {
   }
 
   // Get user's bookmarks
-  const { data: bookmarks } = await supabase
+  const { data: bookmarks } = await createServiceRoleClient()
+    .schema('docs')
     .from('document_bookmarks')
     .select('document_id')
     .eq('user_id', user.id)

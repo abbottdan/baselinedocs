@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all audit log entries for this tenant, joined with document info
-    const { data: logs, error } = await supabase
+    const { data: logs, error } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .select(`
         id,

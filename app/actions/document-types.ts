@@ -920,7 +920,8 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
     })
 
     // Create audit log entry
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         action: 'document_type_counter_reset',

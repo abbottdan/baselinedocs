@@ -149,7 +149,8 @@ export async function searchDocuments(
     const documentIds = filteredDocuments.map(d => d.id)
     
     if (documentIds.length > 0) {
-      const { data: fileCounts } = await supabase
+      const { data: fileCounts } = await createServiceRoleClient()
+        .schema('docs')
         .from('document_files')
         .select('document_id')
         .in('document_id', documentIds)

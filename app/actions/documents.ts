@@ -253,6 +253,7 @@ export async function createDocument(formData: FormData) {
 
     // Create audit log for document creation
     await fileClient
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: document.id,
@@ -315,6 +316,7 @@ export async function createDocument(formData: FormData) {
 
           // Save file metadata (using fileClient which may be service role for master admins)
           const { error: metaError } = await fileClient
+            .schema('docs')
             .from('document_files')
             .insert({
               document_id: document.id,
@@ -363,7 +365,8 @@ export async function createDocument(formData: FormData) {
     }
 
     // Create audit log entry
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: document.id,
@@ -587,7 +590,8 @@ export async function updateDocument(
             return null
           }
 
-          await supabase
+          await createServiceRoleClient()
+            .schema('docs')
             .from('document_files')
             .insert({
               document_id: document.id,
@@ -625,7 +629,8 @@ export async function updateDocument(
     }
 
     // Create audit log entry
-    await supabase
+    await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -855,6 +860,7 @@ export async function deleteDocument(
 
     // Create audit log for the deletion BEFORE deleting the document
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -944,7 +950,8 @@ export async function deleteFile(documentId: string, fileId: string) {
     logger.info('Deleting file', { userId, documentId, fileId, action: 'deleteFile' })
 
     // Get file and document
-    const { data: file, error: fileError } = await supabase
+    const { data: file, error: fileError } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .select('*, document:documents(id, status, created_by, tenant_id)')
       .eq('id', fileId)
@@ -994,7 +1001,8 @@ export async function deleteFile(documentId: string, fileId: string) {
     }
 
     // Delete file record
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_files')
       .delete()
       .eq('id', fileId)
@@ -1015,7 +1023,8 @@ export async function deleteFile(documentId: string, fileId: string) {
     })
 
     // Create audit log entry
-    const { error: auditError } = await supabase
+    const { error: auditError } = await createServiceRoleClient()
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,
@@ -1198,6 +1207,7 @@ export async function releaseDocument(documentId: string) {
 
         // Log obsolescence
         await supabaseAdmin
+          .schema('docs')
           .from('audit_log')
           .insert({
             document_id: predecessor.id,
@@ -1215,6 +1225,7 @@ export async function releaseDocument(documentId: string) {
 
     // Create audit log entry
     await supabaseAdmin
+      .schema('docs')
       .from('audit_log')
       .insert({
         document_id: documentId,

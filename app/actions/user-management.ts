@@ -120,7 +120,8 @@ export async function getAllUsers() {
           .select('id', { count: 'exact', head: true })
           .eq('created_by', u.id)
 
-        const { count: approvalCount } = await supabase
+        const { count: approvalCount } = await createServiceRoleClient()
+          .schema('docs')
           .from('approvers')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', u.id)

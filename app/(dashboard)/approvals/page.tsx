@@ -13,7 +13,8 @@ export default async function MyApprovalsPage() {
   }
 
   // Get all approvals for current user with document files
-  const { data: approvals, error } = await supabase
+  const { data: approvals, error } = await createServiceRoleClient()
+    .schema('docs')
     .from('approvers')
     .select(`
       *,
