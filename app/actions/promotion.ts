@@ -55,7 +55,7 @@ export async function promoteToProduction(
     })
 
     // Fetch source Prototype document
-    const { data: prototypeDoc, error: fetchError } = await supabase
+    const { data: prototypeDoc, error: fetchError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`
@@ -117,7 +117,7 @@ export async function promoteToProduction(
     }
 
         // Check if Production v1 already exists
-    const { data: existingProduction, error: checkError } = await supabase
+    const { data: existingProduction, error: checkError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, version, status')
@@ -153,7 +153,7 @@ export async function promoteToProduction(
     // Handle existing draft based on mode
     if (mode === 'discard' || mode === 'convert') {
       // Find existing prototype draft
-      const { data: existingDraft } = await supabase
+      const { data: existingDraft } = await createServiceRoleClient()
         .schema('docs')
         .from('documents')
         .select('id, version, tenant_id')
@@ -220,7 +220,7 @@ export async function promoteToProduction(
 
       if (mode === 'discard' && existingDraft) {
         // Delete the existing draft
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await createServiceRoleClient()
           .schema('docs')
           .from('documents')
           .delete()
@@ -408,7 +408,7 @@ export async function canPromoteToProduction(documentId: string) {
     }
 
     // Fetch document
-    const { data: doc, error: fetchError } = await supabase
+    const { data: doc, error: fetchError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, document_number, version, status, is_production, created_by')
@@ -451,7 +451,7 @@ export async function canPromoteToProduction(documentId: string) {
     }
 
     // Check: Production v1 doesn't already exist
-    const { data: existingProduction } = await supabase
+    const { data: existingProduction } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')

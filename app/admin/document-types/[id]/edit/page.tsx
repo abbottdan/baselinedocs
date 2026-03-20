@@ -1,5 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
-import { createClient , createSharedClient} from '@/lib/supabase/server';
+import { createClient , createSharedClient, createServiceRoleClient} from '@/lib/supabase/server';
 import { getDocumentType } from '@/app/actions/document-types';
 import DocumentTypeForm from '@/components/document-types/DocumentTypeForm';
 
@@ -27,7 +27,7 @@ export default async function EditDocumentTypePage({
     // Derive is_admin for backwards compat
     let _roleRow: any = null
     if (sharedUser && !sharedUser.is_master_admin) {
-      const { data: rr } = await supabase
+      const { data: rr } = await createServiceRoleClient()
         .schema('docs').from('user_roles')
         .select('role').eq('user_id', user.id)
         .eq('tenant_id', sharedUser.tenant_id).single()

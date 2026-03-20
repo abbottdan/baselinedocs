@@ -10,7 +10,7 @@
  *   if (error) return { success: false, error }
  */
 
-import { createSharedClient } from '@/lib/supabase/server'
+import { createSharedClient, createServiceRoleClient} from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 
 export interface AdminCheckResult {
@@ -55,7 +55,7 @@ export async function requireAdmin(
   }
 
   // Check docs.user_roles for tenant_admin
-  const { data: roleRow } = await client
+  const { data: roleRow } = await createServiceRoleClient()
     .schema('docs')
     .from('user_roles')
     .select('role')

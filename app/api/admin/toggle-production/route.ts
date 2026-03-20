@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current document
-    const { data: document } = await supabase
+    const { data: document } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('is_production, document_number, version')
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update document production status
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .update({ 

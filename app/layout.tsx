@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navigation from '@/components/dashboard/Navigation'
-import { createClient, createSharedClient } from '@/lib/supabase/server'
+import { createClient, createSharedClient, createServiceRoleClient} from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { getCurrentSubdomain } from '@/lib/tenant'
 import { Toaster } from 'sonner'
@@ -55,7 +55,7 @@ export default async function RootLayout({
       isAdmin = true
       userRole = 'Admin'
     } else if (sharedUser?.tenant_id) {
-      const { data: roleRow } = await supabase
+      const { data: roleRow } = await createServiceRoleClient()
         .schema('docs')
         .from('user_roles')
         .select('role')

@@ -27,7 +27,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
     const projectCode = formData.get('projectCode') as string | null
 
     // Get document to check ownership and status
-    const { data: document, error: getError } = await supabase
+    const { data: document, error: getError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')
@@ -64,7 +64,7 @@ export async function updateDocumentWithFiles(formData: FormData) {
     }
 
     // Update document metadata
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .update({

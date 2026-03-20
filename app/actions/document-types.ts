@@ -458,7 +458,7 @@ export async function deleteDocumentType(id: string) {
     })
 
     // Check if any documents use this type
-    const { data: documents, error: checkError } = await supabase
+    const { data: documents, error: checkError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')
@@ -853,7 +853,7 @@ export async function resetDocumentTypeCounter(documentTypeId: string) {
     }
 
     // Check if any documents exist for this type
-    const { count, error: countError } = await supabase
+    const { count, error: countError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id', { count: 'exact', head: true })

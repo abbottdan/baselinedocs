@@ -59,7 +59,7 @@ async function checkMasterAdmin() {
 }
 
 async function getTenantStorage(supabase: any, tenantId: string): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await createServiceRoleClient()
     .schema('docs')
     .from('document_files')
     .select('file_size')
@@ -92,7 +92,7 @@ export async function getAllTenantMetrics(): Promise<TenantMetrics[]> {
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenant.id)
 
-      const { count: documentCount } = await supabase
+      const { count: documentCount } = await createServiceRoleClient()
         .schema('docs')
         .from('documents')
         .select('id', { count: 'exact', head: true })
@@ -102,14 +102,14 @@ export async function getAllTenantMetrics(): Promise<TenantMetrics[]> {
       const storageMB    = storageBytes / (1024 * 1024)
       const storageGB    = storageMB / 1024
 
-      const { count: emailSends } = await supabase
+      const { count: emailSends } = await createServiceRoleClient()
         .schema('docs')
         .from('audit_log')
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenant.id)
         .eq('action', 'email_sent')
 
-      const { data: lastDoc } = await supabase
+      const { data: lastDoc } = await createServiceRoleClient()
         .schema('docs')
         .from('documents')
         .select('updated_at')
@@ -156,12 +156,12 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
     .from('users')
     .select('id', { count: 'exact', head: true })
 
-  const { count: totalDocuments } = await supabase
+  const { count: totalDocuments } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('id', { count: 'exact', head: true })
 
-  const { data: allFiles } = await supabase
+  const { data: allFiles } = await createServiceRoleClient()
     .schema('docs')
     .from('document_files')
     .select('file_size')
@@ -169,7 +169,7 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
   const totalStorageBytes = (allFiles || []).reduce((s: number, f: any) => s + (f.file_size || 0), 0)
   const totalStorageGB    = totalStorageBytes / (1024 * 1024 * 1024)
 
-  const { count: totalEmailSends } = await supabase
+  const { count: totalEmailSends } = await createServiceRoleClient()
     .schema('docs')
     .from('audit_log')
     .select('id', { count: 'exact', head: true })
@@ -208,7 +208,7 @@ export async function getTenantDetails(tenantId: string): Promise<{
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
 
-  const { data: recentDocs } = await supabase
+  const { data: recentDocs } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('id, document_number, version, title, status, created_at')
@@ -219,7 +219,7 @@ export async function getTenantDetails(tenantId: string): Promise<{
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  const { data: apiUsage } = await supabase
+  const { data: apiUsage } = await createServiceRoleClient()
     .schema('docs')
     .from('api_usage')
     .select('api_type, created_at')

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all documents with related data
-    const { data: documents, error } = await supabase
+    const { data: documents, error } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`

@@ -17,6 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { getSubdomainTenantId } from '@/lib/tenant'
 import { createClient } from '@supabase/supabase-js'
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Fetch active document types ───────────────────────────────────────────
-  const { data, error } = await supabase
+  const { data, error } = await createServiceRoleClient()
     .schema('docs')
     .from('document_types')
     .select('id, name, prefix, description')

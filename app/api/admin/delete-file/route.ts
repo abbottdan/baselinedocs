@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get document info for audit log
-    const { data: document } = await supabase
+    const { data: document } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('document_number, version, status')

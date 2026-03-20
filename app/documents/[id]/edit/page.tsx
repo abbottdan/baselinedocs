@@ -27,7 +27,7 @@ export default async function EditDocumentPage({ params }: PageProps) {
   }
 
   // Get document with approvers
-  const { data: document, error } = await supabase
+  const { data: document, error } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`

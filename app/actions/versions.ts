@@ -62,7 +62,7 @@ export async function createNewVersion(sourceDocumentId: string) {
     })
 
     // Fetch source document with all needed info
-    const { data: sourceDoc, error: fetchError } = await supabase
+    const { data: sourceDoc, error: fetchError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`
@@ -138,7 +138,7 @@ export async function createNewVersion(sourceDocumentId: string) {
     }
 
     // Check if next version already exists
-    const { data: existingVersion, error: checkError } = await supabase
+    const { data: existingVersion, error: checkError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, version')
@@ -301,7 +301,7 @@ export async function markPreviousVersionObsolete(
     })
 
     // Get all versions of this document
-    const { data: allVersions, error: fetchError } = await supabase
+    const { data: allVersions, error: fetchError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, version, status, is_production, tenant_id')
@@ -358,7 +358,7 @@ export async function markPreviousVersionObsolete(
     }
 
     // Mark previous version as Obsolete
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .update({ status: 'Obsolete' })
@@ -457,7 +457,7 @@ export async function getDocumentVersions(documentNumber: string) {
       documentNumber
     })
 
-    const { data: versions, error } = await supabase
+    const { data: versions, error } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`
@@ -520,7 +520,7 @@ export async function getDocumentVersions(documentNumber: string) {
 export async function getLatestReleasedVersion(documentNumber: string) {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  const { data, error } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('*')
@@ -541,7 +541,7 @@ export async function getVersionHistory(documentNumber: string) {
   const supabase = await createClient()
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`
@@ -602,7 +602,7 @@ export async function getImmediatePredecessor(documentNumber: string, currentVer
     }
 
     // Query for the predecessor version
-    const { data, error } = await supabase
+    const { data, error } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')

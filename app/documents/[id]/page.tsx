@@ -34,7 +34,7 @@ export default async function DocumentDetailPage({ params }: PageProps) {
     // Derive is_admin for backwards compat
     let _roleRow: any = null
     if (sharedUser && !sharedUser.is_master_admin) {
-      const { data: rr } = await supabase
+      const { data: rr } = await createServiceRoleClient()
         .schema('docs').from('user_roles')
         .select('role').eq('user_id', user.id)
         .eq('tenant_id', sharedUser.tenant_id).single()
@@ -61,7 +61,7 @@ export default async function DocumentDetailPage({ params }: PageProps) {
   }
 
   // Fetch the document to get its document_number
-  const { data: document } = await supabase
+  const { data: document } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('document_number, tenant_id')

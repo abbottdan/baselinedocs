@@ -27,7 +27,7 @@ export async function getDocumentAuditLog(documentId: string) {
     }
 
     // First, get the document to find its document_number
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('document_number')
@@ -39,7 +39,7 @@ export async function getDocumentAuditLog(documentId: string) {
     }
 
     // Get all documents with this document_number (all versions)
-    const { data: allVersions, error: versionsError } = await supabase
+    const { data: allVersions, error: versionsError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')

@@ -1,4 +1,4 @@
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+import { createClient , createSharedClient, createServiceRoleClient} from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { redirect } from 'next/navigation'
 import CompanySettingsForm from './CompanySettingsForm'
@@ -23,7 +23,7 @@ export default async function CompanySettingsPage() {
     // Derive is_admin for backwards compat
     let _roleRow: any = null
     if (sharedUser && !sharedUser.is_master_admin) {
-      const { data: rr } = await supabase
+      const { data: rr } = await createServiceRoleClient()
         .schema('docs').from('user_roles')
         .select('role').eq('user_id', user.id)
         .eq('tenant_id', sharedUser.tenant_id).single()

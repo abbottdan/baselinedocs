@@ -59,7 +59,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
     .single()
   let _roleIsAdmin = false
   if (_su && !_su.is_master_admin) {
-    const { data: rr } = await supabase
+    const { data: rr } = await createServiceRoleClient()
       .schema('docs').from('user_roles')
       .select('role').eq('user_id', user.id)
       .eq('tenant_id', _su.tenant_id).single()

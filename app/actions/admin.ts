@@ -35,7 +35,7 @@ export async function adminDeleteDocument(
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
+        const { data: rr } = await createServiceRoleClient()
           .schema('docs').from('user_roles')
           .select('role').eq('user_id', user.id)
           .eq('tenant_id', _su.tenant_id).single()
@@ -48,7 +48,7 @@ export async function adminDeleteDocument(
     }
 
     // Get document info before deletion (for audit log)
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')
@@ -166,7 +166,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
+        const { data: rr } = await createServiceRoleClient()
           .schema('docs').from('user_roles')
           .select('role').eq('user_id', user.id)
           .eq('tenant_id', _su.tenant_id).single()
@@ -191,7 +191,7 @@ export async function changeDocumentOwner(documentId: string, newOwnerEmail: str
     }
 
     // Get current document info
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, document_number, version, created_by, tenant_id')
@@ -282,7 +282,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
         .eq('id', user.id).single()
       let _isAdmin = _su?.is_master_admin ?? false
       if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase
+        const { data: rr } = await createServiceRoleClient()
           .schema('docs').from('user_roles')
           .select('role').eq('user_id', user.id)
           .eq('tenant_id', _su.tenant_id).single()
@@ -301,7 +301,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
     }
 
     // Get current document info
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('document_number, version, tenant_id')
@@ -313,7 +313,7 @@ export async function adminRenameDocument(documentId: string, newNumber: string)
     }
 
     // Check if new number already exists
-    const { data: existing } = await supabase
+    const { data: existing } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')

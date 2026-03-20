@@ -50,7 +50,7 @@ export default async function DashboardPage() {
   const greeting = getGreetingWithName(userData?.full_name, tenant?.timezone)
 
   // Get total documents count (filtered by subdomain tenant)
-  const { count: totalDocuments } = await supabase
+  const { count: totalDocuments } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })
@@ -68,7 +68,7 @@ export default async function DashboardPage() {
   const pendingApprovalsCount = pendingApprovals?.length || 0
 
   // Get my documents (documents I created in this tenant)
-  const { count: myDocumentsCount } = await supabase
+  const { count: myDocumentsCount } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
     .eq('tenant_id', tenantId)
 
   // Get released documents count (in this tenant)
-  const { count: releasedDocumentsCount } = await supabase
+  const { count: releasedDocumentsCount } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('*', { count: 'exact', head: true })

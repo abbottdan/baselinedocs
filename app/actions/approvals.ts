@@ -72,7 +72,7 @@ export async function addApprover(documentId: string, userId: string, userEmail:
     }
 
     // Check document ownership and status
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, created_by, status, tenant_id')
@@ -233,7 +233,7 @@ export async function removeApprover(documentId: string, approverId: string) {
     }
 
     // Check document ownership and status
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, created_by, status')
@@ -401,7 +401,7 @@ export async function submitForApproval(documentId: string) {
     logger.info('Submitting document for approval', { userId, documentId, action: 'submitForApproval' })
 
     // Get document with approvers count
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*, approvers:approvers(count)')
@@ -597,7 +597,7 @@ export async function approveDocument(documentId: string, comments?: string) {
     const cleanComments = comments ? sanitizeString(comments) : null
 
     // Get document
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')
@@ -936,7 +936,7 @@ export async function rejectDocument(documentId: string, rejectionReason: string
     logger.info('Rejecting document', { userId, documentId, action: 'rejectDocument' })
 
     // Get document
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')
@@ -1202,7 +1202,7 @@ export async function withdrawFromApproval(documentId: string) {
     userId = user.id
 
     // Get document
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*, created_by')

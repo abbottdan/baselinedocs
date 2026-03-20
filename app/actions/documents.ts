@@ -29,7 +29,7 @@ async function checkWritePermission(supabase: any, userId: string): Promise<{ al
     // Fetch role from docs.user_roles
     let _docRole = 'user'
     if (_sharedUser && !_sharedUser.is_master_admin) {
-      const { data: rr } = await supabase
+      const { data: rr } = await createServiceRoleClient()
         .schema('docs').from('user_roles')
         .select('role').eq('user_id', userId)
         .eq('tenant_id', _sharedUser.tenant_id).single()
@@ -169,8 +169,9 @@ export async function createDocument(formData: FormData) {
       }
     }
 
-    // Get document type for prefix and number (verify it's in this tenant)
-    const { data: docType, error: typeError } = await supabase
+    // Get document type for prefix and number — service role bypasses RLS for master admin
+    const srDocType = createServiceRoleClient()
+    const { data: docType, error: typeError } = await srDocType
       .schema('docs')
       .from('document_types')
       .select('prefix, next_number')
@@ -202,7 +203,7 @@ export async function createDocument(formData: FormData) {
     })
 
     // Create document
-    const { data: document, error: createError } = await supabase
+    const { data: document, error: createError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .insert({
@@ -271,7 +272,7 @@ export async function createDocument(formData: FormData) {
 
 
     // Increment document type counter
-    await supabase
+    await srDocType
       .schema('docs')
       .from('document_types')
       .update({ next_number: docType.next_number + 1 })
@@ -487,7 +488,7 @@ export async function updateDocument(
     }
 
     // Get document to check ownership and status
-    const { data: document, error: getError } = await supabase
+    const { data: document, error: getError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*')
@@ -518,7 +519,7 @@ export async function updateDocument(
     }
 
     // Update document
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .update({
@@ -708,7 +709,7 @@ export async function deleteDocument(
     logger.info('Deleting document', { userId, documentId, action: 'deleteDocument' })
 
     // Get document to check ownership and status
-    const { data: document, error: getError } = await supabase
+    const { data: document, error: getError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*, document_files(*)')
@@ -756,7 +757,7 @@ export async function deleteDocument(
 
     // BUSINESS RULE: Document numbers are permanent once created
     // A draft can only be deleted if there's a Released or Obsolete version
-    const { data: otherVersions, error: versionCheckError } = await supabase
+    const { data: otherVersions, error: versionCheckError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, version, status')
@@ -1093,7 +1094,7 @@ export async function releaseDocument(documentId: string) {
     logger.info('Releasing document', { userId, documentId, action: 'releaseDocument' })
 
     // Get document with approvers count
-    const { data: document, error: getError } = await supabase
+    const { data: document, error: getError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('*, approvers:approvers(count)')

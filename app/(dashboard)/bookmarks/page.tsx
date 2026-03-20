@@ -50,7 +50,7 @@ export default async function BookmarksPage() {
   const documentNumbers = bookmarks.map(b => b.document_number)
 
   // Get latest Released version for each bookmarked document
-  const { data: documents } = await supabase
+  const { data: documents } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`

@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get document info
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, document_number, version, tenant_id')
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if new number already exists (for any version)
-    const { data: existing } = await supabase
+    const { data: existing } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')

@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Validate document type belongs to this tenant ─────────────────────────
-  const { data: docType, error: typeError } = await supabase
+  const { data: docType, error: typeError } = await createServiceRoleClient()
     .schema('docs')
     .from('document_types')
     .select('id, prefix, next_number, is_active')
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
   const version = 'vA'
 
   // ── Insert document ───────────────────────────────────────────────────────
-  const { data: document, error: createError } = await supabase
+  const { data: document, error: createError } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .insert({
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
   // Same pattern as the main createDocument action — non-atomic but consistent
   // with existing behaviour. Race conditions here would produce a gap in
   // numbering, not a duplicate (unique constraint protects against that).
-  await supabase
+  createServiceRoleClient()
     .schema('docs')
     .from('document_types')
     .update({ next_number: docType.next_number + 1 })

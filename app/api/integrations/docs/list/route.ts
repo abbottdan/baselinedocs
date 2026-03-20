@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { createClient } from '@supabase/supabase-js'
 import { buildDocumentUrl } from '@/lib/integrations/baselinereqs'
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
   // excluded since they've been superseded and shouldn't attract new links.
   // In Approval is also excluded — those are transitional and will become
   // Released shortly anyway.
-  let dbQuery = supabase
+  let dbQuery = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('id, title, document_number, version, status, updated_at')

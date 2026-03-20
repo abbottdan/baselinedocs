@@ -33,7 +33,7 @@ export async function searchDocuments(
   }
 
   // Build base query with joins for related data
-  let query = supabase
+  let query = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`
@@ -240,7 +240,7 @@ export async function getProjectCodesForFilters() {
   if (!tenantId) return []
 
   const supabase = await createClient()
-  const { data: documents } = await supabase
+  const { data: documents } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('project_code')

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current document
-    const { data: document } = await supabase
+    const { data: document } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('version, document_number, is_production')
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for conflicts with existing versions
-    const { data: existingVersion } = await supabase
+    const { data: existingVersion } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id')
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update document version
-    const { error: updateError } = await supabase
+    const { error: updateError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .update({ 

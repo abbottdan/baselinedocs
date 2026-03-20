@@ -94,7 +94,7 @@ export async function getAllUsers() {
     }
 
     // Batch fetch roles from docs.user_roles for all users in this tenant
-    const { data: roleRows } = await supabase
+    const { data: roleRows } = await createServiceRoleClient()
       .schema('docs')
       .from('user_roles')
       .select('user_id, role')
@@ -114,7 +114,7 @@ export async function getAllUsers() {
     // Get document counts for each user
     const usersWithStats = await Promise.all(
       (users || []).map(async (u) => {
-        const { count: docCount } = await supabase
+        const { count: docCount } = await createServiceRoleClient()
           .schema('docs')
           .from('documents')
           .select('id', { count: 'exact', head: true })

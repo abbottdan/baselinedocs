@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get document info
-    const { data: document, error: docError } = await supabase
+    const { data: document, error: docError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select('id, document_number, version, status, tenant_id')

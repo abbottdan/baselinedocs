@@ -59,7 +59,7 @@ export async function fetchDocumentVersions(
   }
 
   // Fetch all versions of this document within the subdomain's tenant
-  const { data: versions, error } = await supabase
+  const { data: versions, error } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`
@@ -165,7 +165,7 @@ export async function fetchSpecificVersion(
 
   if (!tenantId) return null
 
-  const { data, error } = await supabase
+  const { data, error } = await createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`

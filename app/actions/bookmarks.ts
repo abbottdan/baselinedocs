@@ -118,7 +118,7 @@ export async function getBookmarkedDocuments() {
 
     // Get latest Released version for each bookmarked document number
     // We need to find the most recent Released document for each document_number
-    const { data: documents, error: docsError } = await supabase
+    const { data: documents, error: docsError } = await createServiceRoleClient()
       .schema('docs')
       .from('documents')
       .select(`
