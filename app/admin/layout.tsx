@@ -21,7 +21,7 @@ export default async function AdminLayout({
   const { data: userData } = await supabase
     .schema('shared')
     .from('users')
-    .select('is_admin, is_master_admin')
+    .select('is_master_admin')
     .eq('id', user.id)
     .single()
 

@@ -33,8 +33,9 @@ export default async function NewDocumentPage() {
     )
   }
 
-  // Get active document types for THIS TENANT
-  const { data: documentTypes, error: typesError } = await supabase
+  // Get active document types for THIS TENANT (service role bypasses RLS for cross-tenant master admin)
+  const srClient = createServiceRoleClient()
+  const { data: documentTypes, error: typesError } = await srClient
     .schema('docs')
     .from('document_types')
     .select('*')
