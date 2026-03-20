@@ -33,7 +33,7 @@ export async function searchDocuments(
   }
 
   // Build base query with joins for related data
-  let query = await createServiceRoleClient()
+  let query = createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select(`

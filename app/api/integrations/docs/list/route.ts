@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   // excluded since they've been superseded and shouldn't attract new links.
   // In Approval is also excluded — those are transitional and will become
   // Released shortly anyway.
-  let dbQuery = await createServiceRoleClient()
+  let dbQuery = createServiceRoleClient()
     .schema('docs')
     .from('documents')
     .select('id, title, document_number, version, status, updated_at')
