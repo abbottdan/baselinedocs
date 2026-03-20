@@ -106,7 +106,7 @@ export async function adminDeleteDocument(
 
     if (files && files.length > 0) {
       const filePaths = files.map(f => f.file_path)
-      await supabase.storage
+      await createServiceRoleClient().storage
         .from('documents')
         .remove(filePaths)
     }

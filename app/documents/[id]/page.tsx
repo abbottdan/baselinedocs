@@ -97,8 +97,8 @@ export default async function DocumentDetailPage({ params }: PageProps) {
   const { data: auditLogs, error: auditError } = await supabase
     .from('audit_log')
     .select('*')
-    .eq('document_number', document.document_number)
     .eq('tenant_id', document.tenant_id)
+    .in('document_id', documentData.allVersions.map(v => v.id))
     .order('created_at', { ascending: false })
     .limit(50)
   

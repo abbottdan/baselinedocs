@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       console.error('Database insert error:', dbError)
       
       // Clean up uploaded file
-      await supabase.storage.from('documents').remove([filePath])
+      await createServiceRoleClient().storage.from('documents').remove([filePath])
       
       return NextResponse.json(
         { success: false, error: 'Failed to save file record' },

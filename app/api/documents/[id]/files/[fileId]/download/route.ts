@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // Generate signed URL (valid for 1 hour)
-    const { data: signedUrlData, error: urlError } = await supabase.storage
+    const { data: signedUrlData, error: urlError } = await createServiceRoleClient().storage
       .from('documents')
       .createSignedUrl(file.file_path, 3600)
 

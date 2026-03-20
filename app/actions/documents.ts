@@ -256,7 +256,6 @@ export async function createDocument(formData: FormData) {
       .from('audit_log')
       .insert({
         document_id: document.id,
-        document_number: documentNumber,
         action: 'created',
         performed_by: user.id,
         performed_by_email: user.email,
@@ -296,7 +295,7 @@ export async function createDocument(formData: FormData) {
           const filePath = `${subdomain}/${documentNumber}${version}/${fileName}`
 
           // Upload to storage
-          const { error: uploadError } = await supabase.storage
+          const { error: uploadError } = await createServiceRoleClient().storage
             .from('documents')
             .upload(filePath, file)
 
@@ -570,7 +569,7 @@ export async function updateDocument(
           const fileName = `${document.document_number}${document.version}_${sanitizedName}`
           const filePath = `${subdomain}/${document.document_number}${document.version}/${fileName}`
 
-          const { error: uploadError } = await supabase.storage
+          const { error: uploadError } = await createServiceRoleClient().storage
             .from('documents')
             .upload(filePath, file)
 
@@ -831,7 +830,7 @@ export async function deleteDocument(
         fileCount: filePaths.length,
       })
 
-      const { error: storageError } = await supabase.storage
+      const { error: storageError } = await createServiceRoleClient().storage
         .from('documents')
         .remove(filePaths)
 
@@ -859,7 +858,6 @@ export async function deleteDocument(
       .from('audit_log')
       .insert({
         document_id: documentId,
-        document_number: document.document_number,
         action: 'document_deleted',
         performed_by: user.id,
         performed_by_email: user.email,
@@ -981,7 +979,7 @@ export async function deleteFile(documentId: string, fileId: string) {
     }
 
     // Delete from storage
-    const { error: storageError } = await supabase.storage
+    const { error: storageError } = await createServiceRoleClient().storage
       .from('documents')
       .remove([file.file_path])
 
