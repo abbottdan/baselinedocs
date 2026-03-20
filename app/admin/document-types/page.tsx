@@ -21,7 +21,7 @@ export default async function DocumentTypesPage() {
     .eq('id', user.id)
     .single();
 
-  if (!userData?.is_admin) {
+  if (!userData?.is_master_admin) {
     redirect('/dashboard');
   }
 

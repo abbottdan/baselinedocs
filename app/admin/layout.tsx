@@ -25,7 +25,7 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single()
 
-  if (!userData?.is_admin) {
+  if (!userData?.is_master_admin) {
     redirect('/dashboard')
   }
 
