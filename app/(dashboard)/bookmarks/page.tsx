@@ -18,7 +18,7 @@ export default async function BookmarksPage() {
   // Get user's bookmarks
   const { data: bookmarks } = await supabase
     .from('document_bookmarks')
-    .select('document_number')
+    .select('document_id')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -47,7 +47,7 @@ export default async function BookmarksPage() {
     )
   }
 
-  const documentNumbers = bookmarks.map(b => b.document_number)
+  const documentIds = bookmarks.map(b => b.document_id)
 
   // Get latest Released version for each bookmarked document
   const { data: documents } = await createServiceRoleClient()
@@ -58,7 +58,7 @@ export default async function BookmarksPage() {
       document_types (name, prefix),
       created_by
     `)
-    .in('document_number', documentNumbers)
+    .in('id', documentIds)
     .eq('status', 'Released')
     .order('updated_at', { ascending: false })
 

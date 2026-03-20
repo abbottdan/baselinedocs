@@ -6,14 +6,14 @@ import { toggleBookmark, isDocumentBookmarked } from '@/app/actions/bookmarks'
 import { toast } from 'sonner'
 
 interface BookmarkButtonProps {
-  documentNumber: string
+  documentId: string
   initialBookmarked?: boolean
   size?: 'sm' | 'md' | 'lg'
   showLabel?: boolean
 }
 
 export default function BookmarkButton({ 
-  documentNumber, 
+  documentId, 
   initialBookmarked = false,
   size = 'md',
   showLabel = false
@@ -24,18 +24,18 @@ export default function BookmarkButton({
   // Fetch bookmark status on mount
   useEffect(() => {
     async function checkBookmark() {
-      const bookmarked = await isDocumentBookmarked(documentNumber)
+      const bookmarked = await isDocumentBookmarked(documentId)
       setIsBookmarked(bookmarked)
     }
     checkBookmark()
-  }, [documentNumber])
+  }, [documentId])
 
   const handleToggle = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation() // Prevent row click if in table
     
     setIsLoading(true)
-    const result = await toggleBookmark(documentNumber)
+    const result = await toggleBookmark(documentId)
     setIsLoading(false)
 
     if (result.success) {

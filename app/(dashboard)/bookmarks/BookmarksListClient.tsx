@@ -90,8 +90,8 @@ export default function BookmarksListClient({ documents }: BookmarksListClientPr
                 {formatDistanceToNow(new Date(doc.updated_at), { addSuffix: true })}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <BookmarkButton 
-                  documentNumber={doc.document_number} 
+                <BookmarkButton
+                  documentId={doc.id} 
                   initialBookmarked={true}
                   size="md"
                 />

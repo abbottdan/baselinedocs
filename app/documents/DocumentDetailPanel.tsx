@@ -339,8 +339,8 @@ export default function DocumentDetailPanel({
           
           {/* Bookmark Button */}
           <div className="flex-shrink-0 pt-1">
-            <BookmarkButton 
-              documentNumber={documentNumber} 
+            <BookmarkButton
+              documentId={latestReleased?.id || wipVersions[0]?.id || ''} 
               size="lg"
               showLabel
             />

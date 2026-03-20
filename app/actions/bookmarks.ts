@@ -5,38 +5,33 @@ import { getSubdomainTenantId } from '@/lib/tenant'
 import { revalidatePath } from 'next/cache'
 
 /**
- * Toggle bookmark for a document
- * If bookmarked, removes it. If not bookmarked, adds it.
+ * Toggle bookmark for a document version.
+ * documentId is the UUID of the specific document version.
  */
-export async function toggleBookmark(documentNumber: string) {
+export async function toggleBookmark(documentId: string) {
   try {
     const supabase = await createClient()
-
-    // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return { success: false, error: 'Not authenticated' }
-    }
+    if (authError || !user) return { success: false, error: 'Not authenticated' }
 
-    // Get sub-domain's tenant_id
     const subdomainTenantId = await getSubdomainTenantId()
-    
-    if (!subdomainTenantId) {
-      return { success: false, error: 'User tenant not found' }
-    }
+    if (!subdomainTenantId) return { success: false, error: 'Tenant not found' }
+
+    const sr = createServiceRoleClient()
 
     // Check if bookmark already exists
-    const { data: existing } = await supabase
+    const { data: existing } = await sr
+      .schema('docs')
       .from('document_bookmarks')
       .select('id')
       .eq('user_id', user.id)
-      .eq('document_number', documentNumber)
+      .eq('document_id', documentId)
       .eq('tenant_id', subdomainTenantId)
-      .single()
+      .maybeSingle()
 
     if (existing) {
-      // Remove bookmark
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await sr
+        .schema('docs')
         .from('document_bookmarks')
         .delete()
         .eq('id', existing.id)
@@ -50,12 +45,12 @@ export async function toggleBookmark(documentNumber: string) {
       revalidatePath('/bookmarks')
       return { success: true, bookmarked: false }
     } else {
-      // Add bookmark
-      const { error: insertError } = await supabase
+      const { error: insertError } = await sr
+        .schema('docs')
         .from('document_bookmarks')
         .insert({
           user_id: user.id,
-          document_number: documentNumber,
+          document_id: documentId,
           tenant_id: subdomainTenantId,
         })
 
@@ -70,38 +65,30 @@ export async function toggleBookmark(documentNumber: string) {
     }
   } catch (error) {
     console.error('Toggle bookmark error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to toggle bookmark',
-    }
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to toggle bookmark' }
   }
 }
 
 /**
- * Get all bookmarked documents for current user
- * Returns latest Released version for each bookmarked document number
+ * Get all bookmarked documents for the current user.
+ * Returns the bookmarked document versions.
  */
 export async function getBookmarkedDocuments() {
   try {
     const supabase = await createClient()
-
-    // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return { success: false, error: 'Not authenticated' }
-    }
+    if (authError || !user) return { success: false, error: 'Not authenticated' }
 
-    // Get current sub-domain's tenant_id
     const subdomainTenantId = await getSubdomainTenantId()
-    
-    if (!subdomainTenantId) {
-      return { success: false, error: 'User tenant not found' }
-    }
+    if (!subdomainTenantId) return { success: false, error: 'Tenant not found' }
 
-    // Get user's bookmarks
-    const { data: bookmarks, error: bookmarksError } = await supabase
+    const sr = createServiceRoleClient()
+
+    // Get user's bookmarked document_ids
+    const { data: bookmarks, error: bookmarksError } = await sr
+      .schema('docs')
       .from('document_bookmarks')
-      .select('document_number')
+      .select('document_id')
       .eq('user_id', user.id)
       .eq('tenant_id', subdomainTenantId)
 
@@ -110,24 +97,16 @@ export async function getBookmarkedDocuments() {
       return { success: false, error: 'Failed to fetch bookmarks' }
     }
 
-    if (!bookmarks || bookmarks.length === 0) {
-      return { success: true, documents: [] }
-    }
+    if (!bookmarks || bookmarks.length === 0) return { success: true, documents: [] }
 
-    const documentNumbers = bookmarks.map(b => b.document_number)
+    const documentIds = bookmarks.map(b => b.document_id)
 
-    // Get latest Released version for each bookmarked document number
-    // We need to find the most recent Released document for each document_number
-    const { data: documents, error: docsError } = await createServiceRoleClient()
+    // Fetch the bookmarked document versions
+    const { data: documents, error: docsError } = await sr
       .schema('docs')
       .from('documents')
-      .select(`
-        *,
-        document_types (name, prefix),
-        created_by
-      `)
-      .in('document_number', documentNumbers)
-      .eq('status', 'Released')
+      .select('*, document_types(name, prefix)')
+      .in('id', documentIds)
       .order('updated_at', { ascending: false })
 
     if (docsError) {
@@ -135,43 +114,33 @@ export async function getBookmarkedDocuments() {
       return { success: false, error: 'Failed to fetch documents' }
     }
 
-    // Filter to get only the latest version for each document_number
-    const latestDocuments = new Map()
-    documents?.forEach(doc => {
-      if (!latestDocuments.has(doc.document_number)) {
-        latestDocuments.set(doc.document_number, doc)
-      }
-    })
-
-    return { 
-      success: true, 
-      documents: Array.from(latestDocuments.values())
-    }
+    return { success: true, documents: documents || [] }
   } catch (error) {
     console.error('Get bookmarked documents error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch bookmarked documents',
-    }
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch bookmarked documents' }
   }
 }
 
 /**
- * Check if a document is bookmarked by current user
+ * Check if a specific document version is bookmarked by current user.
  */
-export async function isDocumentBookmarked(documentNumber: string): Promise<boolean> {
+export async function isDocumentBookmarked(documentId: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return false
 
-    const { data } = await supabase
+    const subdomainTenantId = await getSubdomainTenantId()
+    if (!subdomainTenantId) return false
+
+    const { data } = await createServiceRoleClient()
+      .schema('docs')
       .from('document_bookmarks')
       .select('id')
       .eq('user_id', user.id)
-      .eq('document_number', documentNumber)
-      .single()
+      .eq('document_id', documentId)
+      .eq('tenant_id', subdomainTenantId)
+      .maybeSingle()
 
     return !!data
   } catch {

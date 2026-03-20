@@ -58,7 +58,7 @@ export default function DocumentsTable({ documents, onDocumentSelect, selectedDo
               </span>
               <div className="flex items-center gap-2">
                 <BookmarkButton
-                  documentNumber={doc.document_number}
+                  documentId={doc.id}
                   size="sm"
                 />
                 <Badge className={cn("text-xs px-1.5 py-0", STATUS_COLORS[doc.status] || 'bg-gray-500')}>
