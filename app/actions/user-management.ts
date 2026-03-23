@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser, currentUserHasRole } from '@/lib/tenant'
 import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
-import { logAudit } from '@/lib/audit'
+import { logAudit } from '@/lib/audit-helper'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -10,10 +10,28 @@ import {
   addExistingUserToProduct,
   type ExistingTenantUser,
 } from '@/app/actions/user-management'
-import ImportUsersDialog from '@/components/admin/ImportUsersDialog'
-import { Badge, ConfirmDialog } from '@/components/ui/primitives'
+import { ImportUsersDialog } from './UserDialogs'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Field, Input, Select, FormError } from '@/components/ui/form-fields'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { UserPlus, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 
@@ -35,11 +53,11 @@ const ROLE_OPTIONS = [
   { value: 'tenant_admin', label: 'Tenant Admin' },
 ]
 
-const ROLE_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
-  master_admin: 'danger',
-  tenant_admin: 'default',
-  user:         'neutral',
-  readonly:     'neutral',
+const ROLE_BADGE: Record<string, string> = {
+  master_admin: 'bg-red-100 text-red-800',
+  tenant_admin: 'bg-blue-100 text-blue-800',
+  user:         'bg-slate-100 text-slate-700',
+  readonly:     'bg-slate-100 text-slate-500',
 }
 
 // Clarity Blue — BaselineDocs product accent
@@ -199,12 +217,13 @@ export default function UserManagementTable({
         <div className="flex items-center gap-2">
           <ImportUsersDialog />
           <Button
+            size="sm"
             onClick={() => {
               setShowInvite(s => !s)
               if (showInvite) resetInviteForm()
             }}
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-4 h-4 mr-2" />
             Add User
           </Button>
         </div>
@@ -224,17 +243,16 @@ export default function UserManagementTable({
           </div>
 
           {/* Combo input */}
-          <div ref={comboRef} className="relative">
-            <Field label="Email or name">
-              <Input
-                value={query}
-                onChange={e => handleQueryChange(e.target.value)}
-                onFocus={() => setShowDropdown(true)}
-                placeholder="Search by name or email, or type a new address…"
-                autoComplete="off"
-              />
-            </Field>
-
+          <div ref={comboRef} className="relative space-y-1">
+            <Label htmlFor="user-combo">Email or name</Label>
+            <Input
+              id="user-combo"
+              value={query}
+              onChange={e => handleQueryChange(e.target.value)}
+              onFocus={() => setShowDropdown(true)}
+              placeholder="Search by name or email, or type a new address…"
+              autoComplete="off"
+            />
             {showDropdown && (filtered.length > 0 || isNewEmail) && (
               <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded shadow-md overflow-hidden">
                 {filtered.length > 0 && (
@@ -265,7 +283,9 @@ export default function UserManagementTable({
                       onMouseDown={e => { e.preventDefault(); setShowDropdown(false) }}
                       className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors"
                     >
-                      <p className="text-sm font-medium text-slate-800">Invite <span style={{ color: ACCENT }}>{query}</span></p>
+                      <p className="text-sm font-medium text-slate-800">
+                        Invite <span style={{ color: ACCENT }}>{query}</span>
+                      </p>
                       <p className="text-xs text-slate-400">Send a Supabase invitation email</p>
                     </button>
                   </>
@@ -276,23 +296,31 @@ export default function UserManagementTable({
 
           {/* Full Name — only for new email invites */}
           {isNewEmail && !selectedExisting && (
-            <Field label="Full name (optional)">
+            <div className="space-y-1">
+              <Label htmlFor="full-name">Full name (optional)</Label>
               <Input
+                id="full-name"
                 value={inviteFullName}
                 onChange={e => setInviteFullName(e.target.value)}
                 placeholder="Jane Smith"
               />
-            </Field>
+            </div>
           )}
 
           {/* Role */}
-          <Field label="Role">
-            <Select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-              {ROLE_OPTIONS.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
+          <div className="space-y-1">
+            <Label>Role</Label>
+            <Select value={inviteRole} onValueChange={setInviteRole}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_OPTIONS.map(r => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </Field>
+          </div>
 
           {/* Contextual hint */}
           {selectedExisting && (
@@ -306,10 +334,12 @@ export default function UserManagementTable({
             </p>
           )}
 
-          {inviteError && <FormError>{inviteError}</FormError>}
+          {inviteError && (
+            <p className="text-xs text-red-600">{inviteError}</p>
+          )}
 
           <div className="flex gap-3">
-            <Button onClick={handleInvite} disabled={isPending || !canSubmit}>
+            <Button size="sm" onClick={handleInvite} disabled={isPending || !canSubmit}>
               {isPending
                 ? 'Saving…'
                 : selectedExisting
@@ -317,6 +347,7 @@ export default function UserManagementTable({
                   : 'Send Invitation'}
             </Button>
             <Button
+              size="sm"
               variant="outline"
               onClick={() => { setShowInvite(false); resetInviteForm() }}
             >
@@ -352,28 +383,34 @@ export default function UserManagementTable({
                 {/* Role */}
                 <td className="px-4 py-3">
                   {u.is_master_admin || u.id === currentUserId ? (
-                    <Badge variant={ROLE_VARIANT[u.role] ?? 'neutral'}>
-                      {u.is_master_admin ? 'Master Admin' : u.role.replace('_', ' ')}
-                    </Badge>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_BADGE[u.role] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {u.is_master_admin ? 'Master Admin' : ROLE_OPTIONS.find(r => r.value === u.role)?.label ?? u.role}
+                    </span>
                   ) : (
                     <Select
                       value={u.role}
-                      onChange={e => handleRoleChange(u.id, e.target.value)}
+                      onValueChange={val => handleRoleChange(u.id, val)}
                       disabled={isPending}
-                      className="w-40 text-xs"
                     >
-                      {ROLE_OPTIONS.map(r => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
+                      <SelectTrigger className="w-36 h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLE_OPTIONS.map(r => (
+                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   )}
                 </td>
 
                 {/* Status */}
                 <td className="px-4 py-3">
-                  <Badge variant={u.is_active ? 'success' : 'neutral'}>
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                    u.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
+                  }`}>
                     {u.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
+                  </span>
                 </td>
 
                 {/* Last sign in */}
@@ -425,16 +462,26 @@ export default function UserManagementTable({
       </div>
 
       {/* Deactivate confirm */}
-      {deactivateTarget && (
-        <ConfirmDialog
-          title="Deactivate user?"
-          description={`${deactivateTarget.full_name ?? deactivateTarget.email} will lose access immediately. You can reactivate them later.`}
-          confirmLabel="Deactivate"
-          confirmVariant="danger"
-          onConfirm={handleDeactivate}
-          onCancel={() => setDeactivateTarget(null)}
-        />
-      )}
+      <AlertDialog open={!!deactivateTarget} onOpenChange={open => { if (!open) setDeactivateTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deactivateTarget?.full_name ?? deactivateTarget?.email} will lose access immediately. You can reactivate them later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeactivate}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   )
 }
