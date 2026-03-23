@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { getCurrentUser, currentUserHasRole } from '@/lib/tenant'
+import { getCurrentUser, isTenantAdmin } from '@/lib/tenant'
 import AdminNavTabs from './AdminNavTabs'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
   if (!user) redirect('/auth/login')
-  if (!await currentUserHasRole('tenant_admin')) redirect('/dashboard')
+  if (!await isTenantAdmin()) redirect('/dashboard')
 
   const subdomain = user.tenant?.subdomain
 

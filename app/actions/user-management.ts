@@ -2,9 +2,8 @@
 
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser, currentUserHasRole } from '@/lib/tenant'
+import { getCurrentUser, isTenantAdmin } from '@/lib/tenant'
 import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
-import { logAudit } from '@/lib/audit-helper'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +28,7 @@ export async function getExistingTenantUsers(): Promise<{
 }> {
   const user = await getCurrentUser()
   if (!user) return { data: [], error: 'Not authenticated' }
-  if (!await currentUserHasRole('tenant_admin')) return { data: [], error: 'Insufficient permissions' }
+  if (!await isTenantAdmin()) return { data: [], error: 'Insufficient permissions' }
 
   const sharedClient  = createSharedClient()
   const serviceClient = createServiceRoleClient()
@@ -63,7 +62,7 @@ export async function addExistingUserToProduct(targetUserId: string, role: strin
   try {
     const user = await getCurrentUser()
     if (!user) return { error: 'Not authenticated' }
-    if (!await currentUserHasRole('tenant_admin')) return { error: 'Insufficient permissions' }
+    if (!await isTenantAdmin()) return { error: 'Insufficient permissions' }
 
     if (!VALID_ROLES.includes(role as DocsRole)) return { error: 'Invalid role' }
 
@@ -99,17 +98,7 @@ export async function addExistingUserToProduct(targetUserId: string, role: strin
 
     if (error) return { error: error.message }
 
-    await logAudit({
-      tenantId:        user.tenant_id,
-      action:          'user_added_to_product',
-      entityType:      'user',
-      entityId:        targetUserId,
-      entityLabel:     target.email,
-      performedBy:     user.id,
-      performedByEmail: user.email,
-      newValues:       { role },
-    })
-
+    console.log(`[addExistingUserToProduct] ${target.email} added with role ${role} by ${user.email}`)
     revalidatePath('/admin/users')
     return { success: true }
   } catch (err: any) {
@@ -138,7 +127,7 @@ export async function inviteUser(input: {
   try {
     const user = await getCurrentUser()
     if (!user) return { error: 'Not authenticated' }
-    if (!await currentUserHasRole('tenant_admin')) return { error: 'Insufficient permissions' }
+    if (!await isTenantAdmin()) return { error: 'Insufficient permissions' }
 
     const parsed = InviteSchema.safeParse(input)
     if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? 'Invalid input' }
@@ -182,16 +171,7 @@ export async function inviteUser(input: {
       }
     }
 
-    await logAudit({
-      tenantId:        user.tenant_id,
-      action:          'user_invited',
-      entityType:      'user',
-      entityLabel:     parsed.data.email,
-      performedBy:     user.id,
-      performedByEmail: user.email,
-      newValues:       { email: parsed.data.email, role: parsed.data.role },
-    })
-
+    console.log(`[inviteUser] Invited ${parsed.data.email} with role ${parsed.data.role} by ${user.email}`)
     revalidatePath('/admin/users')
     return { success: true }
   } catch (err: any) {
@@ -208,7 +188,7 @@ export async function updateUserRole(targetUserId: string, newRole: string) {
   try {
     const user = await getCurrentUser()
     if (!user) return { error: 'Not authenticated' }
-    if (!await currentUserHasRole('tenant_admin')) return { error: 'Insufficient permissions' }
+    if (!await isTenantAdmin()) return { error: 'Insufficient permissions' }
 
     if (!VALID_ROLES.includes(newRole as DocsRole)) return { error: 'Invalid role' }
 
@@ -243,18 +223,7 @@ export async function updateUserRole(targetUserId: string, newRole: string) {
 
     if (error) return { error: error.message }
 
-    await logAudit({
-      tenantId:        user.tenant_id,
-      action:          'user_role_changed',
-      entityType:      'user',
-      entityId:        targetUserId,
-      entityLabel:     target.email,
-      performedBy:     user.id,
-      performedByEmail: user.email,
-      oldValues:       { role: oldRoleRow?.role ?? 'unknown' },
-      newValues:       { role: newRole },
-    })
-
+    console.log(`[updateUserRole] ${target.email} role changed to ${newRole} by ${user.email}`)
     revalidatePath('/admin/users')
     return { success: true }
   } catch (err: any) {
@@ -270,7 +239,7 @@ export async function deactivateUser(targetUserId: string) {
   try {
     const user = await getCurrentUser()
     if (!user) return { error: 'Not authenticated' }
-    if (!await currentUserHasRole('tenant_admin')) return { error: 'Insufficient permissions' }
+    if (!await isTenantAdmin()) return { error: 'Insufficient permissions' }
     if (targetUserId === user.id) return { error: 'You cannot deactivate your own account' }
 
     const sharedClient = createSharedClient()
@@ -295,16 +264,7 @@ export async function deactivateUser(targetUserId: string) {
 
     if (error) return { error: error.message }
 
-    await logAudit({
-      tenantId:        user.tenant_id,
-      action:          'user_deactivated',
-      entityType:      'user',
-      entityId:        targetUserId,
-      entityLabel:     target.email,
-      performedBy:     user.id,
-      performedByEmail: user.email,
-    })
-
+    console.log(`[deactivateUser] ${target.email} deactivated by ${user.email}`)
     revalidatePath('/admin/users')
     return { success: true }
   } catch (err: any) {
@@ -329,7 +289,7 @@ export async function importUsersFromCSV(csvText: string): Promise<ImportUsersRe
   try {
     const user = await getCurrentUser()
     if (!user) return { success: false, imported: 0, failed: 0, errors: [], error: 'Not authenticated' }
-    if (!await currentUserHasRole('tenant_admin')) return { success: false, imported: 0, failed: 0, errors: [], error: 'Insufficient permissions' }
+    if (!await isTenantAdmin()) return { success: false, imported: 0, failed: 0, errors: [], error: 'Insufficient permissions' }
 
     const lines  = csvText.trim().split('\n').map(l => l.trim()).filter(Boolean)
     const header = lines[0]?.toLowerCase() ?? ''

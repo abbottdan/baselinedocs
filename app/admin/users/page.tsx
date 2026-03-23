@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { redirect } from 'next/navigation'
-import { getCurrentUser, currentUserHasRole } from '@/lib/tenant'
+import { getCurrentUser, isTenantAdmin } from '@/lib/tenant'
 import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import { getExistingTenantUsers } from '@/app/actions/user-management'
@@ -12,7 +12,7 @@ export const metadata = { title: 'User Management' }
 export default async function AdminUsersPage() {
   const currentUser = await getCurrentUser()
   if (!currentUser) redirect('/auth/login')
-  if (!await currentUserHasRole('tenant_admin')) redirect('/dashboard')
+  if (!await isTenantAdmin()) redirect('/dashboard')
 
   const sharedClient  = createSharedClient()
   const serviceClient = createServiceRoleClient()
