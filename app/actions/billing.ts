@@ -10,7 +10,7 @@
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 import {
-  getStripe, getOrCreateStripeCustomer, createCheckoutSession,
+  stripe, getOrCreateStripeCustomer, createCheckoutSession,
 } from '@/lib/stripe/client'
 import { getCurrentSubdomain, getSubdomainTenantId } from '@/lib/tenant'
 import { requireAdmin } from '@/lib/auth/require-admin'
@@ -159,7 +159,7 @@ export async function changePlan(
     existingCustomerId: tenantData.stripe_customer_id,
   })
 
-  const stripe = getStripe()
+  // stripe already imported
 
   if (sub?.stripe_subscription_id && !forceCheckout) {
     try {
@@ -227,7 +227,7 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
     existingCustomerId: tenantData.stripe_customer_id,
   })
 
-  const stripe  = getStripe()
+
   const errors: string[] = []
 
   for (let i = 0; i < allSubs.length; i++) {
@@ -324,7 +324,7 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
       existingCustomerId: tenantData.stripe_customer_id,
     })
 
-    const stripe  = getStripe()
+  
     const baseUrl = `https://${subdomain}.${appDomain}`
     const session = await createCheckoutSession({
       customerId, priceId, tenantId,
@@ -384,7 +384,7 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   // Stripe: period end — only bill add-on seats above included
   const seatPriceId = getSeatPriceId(currentPlan)
   if (sub?.stripe_subscription_id && seatPriceId) {
-    const stripe        = getStripe()
+
     const includedSeats = PLAN_INCLUDED_USERS[currentPlan]
     const addonSeats    = Math.max(newLimit - includedSeats, 0)
     try {
@@ -443,7 +443,7 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
   // Stripe: period end — only bill blocks above included
   const storagePriceId = process.env.STRIPE_PRICE_STORAGE_10GB
   if (sub?.stripe_subscription_id && storagePriceId) {
-    const stripe        = getStripe()
+
     const includedGB    = PLAN_INCLUDED_STORAGE_GB[currentPlan]
     const addonBlocks   = Math.max(Math.floor((newGB - includedGB) / STORAGE_BLOCK_GB), 0)
     try {
