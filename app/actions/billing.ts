@@ -85,7 +85,7 @@ export async function changePlan(
   forceCheckout: boolean = false,
 ): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { user, tenantId } = ctx
 
   if (!PLAN_ORDER.includes(newPlan)) return { success: false, error: 'Invalid plan' }
@@ -192,7 +192,7 @@ export async function changePlan(
 
 export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolean = true): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { user, tenantId } = ctx
 
   if (!confirmed) return { success: false, error: 'Not confirmed' }
@@ -278,7 +278,7 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
 
 export async function addTool(newProduct: Product): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { user, tenantId } = ctx
 
   const platform    = createPlatformClient()
@@ -349,7 +349,7 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   if (delta === 0) return { success: false, error: 'No change requested' }
 
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { tenantId } = ctx
 
   const platform = createPlatformClient()
@@ -422,7 +422,7 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
   if (product !== 'baselinedocs') return { success: false, error: 'Storage add-ons are available for BaselineDocs only' }
 
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { tenantId } = ctx
 
   const platform = createPlatformClient()
