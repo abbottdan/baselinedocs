@@ -14,13 +14,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { changePlan, upgradeSuite, adjustSeats, adjustStorage } from '@/app/actions/billing'
 import {
-  changePlan, upgradeSuite, adjustSeats, adjustStorage, getPlanFeatures,
+  getPlanFeatures,
   PLAN_PRICES, PLAN_NAMES, PLAN_INCLUDED_USERS, SEAT_ADDON_PRICE,
   PLAN_INCLUDED_STORAGE_GB, STORAGE_BLOCK_GB, STORAGE_PRICE_PER_BLOCK,
   CUSTOM_CONTRACT_SEAT_THRESHOLD,
   type Plan, type Product,
-} from '@/app/actions/billing'
+} from '@/lib/billing/constants'
 
 export interface BillingManagementPanelProps {
   tenantId:            string

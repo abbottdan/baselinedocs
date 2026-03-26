@@ -1,27 +1,10 @@
 'use server'
 
 /**
- * app/actions/billing.ts — REPLACE IN ALL THREE PRODUCTS
+ * app/actions/billing.ts — ALL THREE PRODUCTS (identical)
  *
- * Pricing per clearstride_pricing_summary_v2:
- *   Plans:   trial (free, 30d) | starter ($49) | pro ($89)
- *   Users:   trial=2, starter=10, pro=25 included
- *   Seats:   starter=$5/seat, pro=$7/seat  (plan-dependent)
- *   Storage: Docs only — starter=5GB, pro=20GB included; add-ons $5/10GB block
- *   Suite:   2nd tool 15% off, 3rd tool 20% off — same tier across all tools
- *   Custom:  200+ seats → contact sales, no self-serve
- *
- * Stripe env vars (per product deployment in Vercel):
- *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
- *   STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO
- *   STRIPE_PRICE_SEAT_STARTER    — per-seat price on starter plan
- *   STRIPE_PRICE_SEAT_PRO        — per-seat price on pro plan
- *   STRIPE_PRICE_STORAGE_10GB    — 10GB storage block (Docs only)
- *   STRIPE_PRICE_STARTER_2ND     — starter 2nd-tool price (15% off = $41.65)
- *   STRIPE_PRICE_STARTER_3RD     — starter 3rd-tool price (20% off = $39.20)
- *   STRIPE_PRICE_PRO_2ND         — pro 2nd-tool price (15% off = $75.65)
- *   STRIPE_PRICE_PRO_3RD         — pro 3rd-tool price (20% off = $71.20)
- *   CLEARSTRIDE_PRODUCT          — baselinedocs | baselinereqs | baselineinventory
+ * Only async server actions live here — 'use server' files cannot export
+ * non-async values. Constants and pure helpers are in lib/billing/constants.ts.
  */
 
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
@@ -32,6 +15,12 @@ import {
 import { getCurrentSubdomain, getSubdomainTenantId } from '@/lib/tenant'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { revalidatePath } from 'next/cache'
+import {
+  PLAN_ORDER, PLAN_INCLUDED_USERS, PLAN_INCLUDED_STORAGE_GB,
+  SEAT_ADDON_PRICE, STORAGE_BLOCK_GB, CUSTOM_CONTRACT_SEAT_THRESHOLD,
+  BUNDLE_DISCOUNTS, PLAN_NAMES,
+  type Plan, type Product,
+} from '@/lib/billing/constants'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,58 +28,10 @@ export type BillingActionResult =
   | { success: true; message: string; checkoutUrl?: string }
   | { success: false; error: string }
 
-export type Plan = 'trial' | 'starter' | 'pro'
-export type Product = 'baselinedocs' | 'baselinereqs' | 'baselineinventory'
+// Re-export types so pages/components can import them from one place
+export type { Plan, Product }
 
-// ─── Pricing constants (UI display — actual charges via Stripe) ───────────────
-
-export const PLAN_PRICES: Record<Plan, number> = {
-  trial:   0,
-  starter: 49,
-  pro:     89,
-}
-
-export const PLAN_NAMES: Record<Plan, string> = {
-  trial:   'Trial',
-  starter: 'Starter',
-  pro:     'Pro',
-}
-
-// Users included in each plan (before seat add-ons)
-export const PLAN_INCLUDED_USERS: Record<Plan, number> = {
-  trial:   2,
-  starter: 10,
-  pro:     25,
-}
-
-// Seat add-on price varies by plan
-export const SEAT_ADDON_PRICE: Record<Plan, number> = {
-  trial:   0,
-  starter: 5,
-  pro:     7,
-}
-
-// Storage included per plan (Docs only)
-export const PLAN_INCLUDED_STORAGE_GB: Record<Plan, number> = {
-  trial:   1,
-  starter: 5,
-  pro:     20,
-}
-
-export const STORAGE_BLOCK_GB        = 10
-export const STORAGE_PRICE_PER_BLOCK = 5   // same for both plans
-
-// Custom contract threshold — no self-serve above this
-export const CUSTOM_CONTRACT_SEAT_THRESHOLD = 200
-
-// Bundle discounts
-export const BUNDLE_DISCOUNTS = { second: 0.15, third: 0.20 }
-
-const PLAN_ORDER: Plan[] = ['trial', 'starter', 'pro']
-
-const ALL_PRODUCTS: Product[] = ['baselinedocs', 'baselinereqs', 'baselineinventory']
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function getProduct(): Product {
   const p = process.env.CLEARSTRIDE_PRODUCT
@@ -130,25 +71,14 @@ async function getAdminContext() {
   return { user, tenantId }
 }
 
-// Returns how many products this tenant currently subscribes to (active/trialing)
 async function getActiveToolCount(tenantId: string, platform: ReturnType<typeof createPlatformClient>): Promise<number> {
   const { data } = await platform.schema('platform').from('product_subscriptions')
-    .select('product')
-    .eq('tenant_id', tenantId)
-    .in('status', ['active', 'trialing'])
+    .select('product').eq('tenant_id', tenantId).in('status', ['active', 'trialing'])
   return data?.length ?? 0
 }
 
 // ─── changePlan ───────────────────────────────────────────────────────────────
-/**
- * Upgrade or downgrade plan for this product.
- *
- * Suite rule: if tenant has multiple tools, all must be upgraded simultaneously
- * via upgradeSuite(). This action handles single-product changes only and will
- * error if the tenant has other tools at a different tier (except trial).
- *
- * DB updated immediately. Stripe change at period end (proration_behavior: none).
- */
+
 export async function changePlan(
   newPlan:       Plan,
   confirmed:     boolean = true,
@@ -176,19 +106,13 @@ export async function changePlan(
   const isDowngrade = newIdx < currentIdx
   if (isDowngrade && !confirmed) return { success: false, error: 'Downgrade not confirmed' }
 
-  // Suite consistency check: if upgrading and other tools exist, they must all upgrade together
+  // Suite consistency check on upgrade
   if (!isDowngrade && newPlan !== 'trial') {
     const { data: otherSubs } = await platform.schema('platform').from('product_subscriptions')
-      .select('product, plan')
-      .eq('tenant_id', tenantId)
-      .in('status', ['active', 'trialing'])
-      .neq('product', product)
-    const inconsistentTools = (otherSubs ?? []).filter(s => s.plan !== newPlan && s.plan !== 'trial')
-    if (inconsistentTools.length > 0) {
-      return {
-        success: false,
-        error: `Suite rule: all tools must be on the same plan. Use "Upgrade Suite" to upgrade all tools together.`,
-      }
+      .select('product, plan').eq('tenant_id', tenantId).in('status', ['active', 'trialing']).neq('product', product)
+    const inconsistent = (otherSubs ?? []).filter(s => s.plan !== newPlan && s.plan !== 'trial')
+    if (inconsistent.length > 0) {
+      return { success: false, error: 'Suite rule: all tools must be on the same plan. Use "Upgrade Suite" to upgrade all tools together.' }
     }
   }
 
@@ -198,13 +122,11 @@ export async function changePlan(
     const { count } = await admin.schema('shared').from('users')
       .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true)
     const newIncluded = PLAN_INCLUDED_USERS[newPlan]
-    const newLimit    = Math.min(sub?.user_limit ?? newIncluded, newIncluded)
-    if ((count ?? 0) > newLimit) {
-      return { success: false, error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users or purchase add-on seats first.` }
+    if ((count ?? 0) > newIncluded) {
+      return { success: false, error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users first.` }
     }
   }
 
-  // Calculate new user_limit: on downgrade cap to plan included; on upgrade keep current (admin adds seats separately)
   const newIncluded  = PLAN_INCLUDED_USERS[newPlan]
   const newUserLimit = isDowngrade
     ? Math.min(sub?.user_limit ?? newIncluded, newIncluded)
@@ -215,10 +137,10 @@ export async function changePlan(
     .update({ plan: newPlan, user_limit: newUserLimit })
     .eq('tenant_id', tenantId).eq('product', product)
 
-  // Stripe: at period end
-  const toolCount  = await getActiveToolCount(tenantId, platform)
-  const position   = Math.min(toolCount, 3) as 1 | 2 | 3
-  const priceId    = getPlanPriceId(newPlan, position)
+  // Stripe: period end
+  const toolCount = await getActiveToolCount(tenantId, platform)
+  const position  = Math.min(toolCount, 3) as 1 | 2 | 3
+  const priceId   = getPlanPriceId(newPlan, position)
 
   if (!priceId) {
     revalidatePath('/admin/billing')
@@ -267,13 +189,7 @@ export async function changePlan(
 }
 
 // ─── upgradeSuite ─────────────────────────────────────────────────────────────
-/**
- * Upgrade ALL of this tenant's active tools to a new plan simultaneously.
- * Required for multi-tool tenants (suite rule: all tools must share one tier).
- *
- * Updates all product_subscriptions rows immediately.
- * Schedules all Stripe subscriptions at period end.
- */
+
 export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolean = true): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
   if ('error' in ctx) return { success: false, error: ctx.error }
@@ -291,7 +207,6 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
 
   const isDowngrade = allSubs.some(s => PLAN_ORDER.indexOf(s.plan as Plan) > PLAN_ORDER.indexOf(newPlan))
 
-  // Seat guard on downgrade across all tools (users are shared)
   if (isDowngrade) {
     const admin = createServiceRoleClient()
     const { count } = await admin.schema('shared').from('users')
@@ -312,7 +227,7 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
     existingCustomerId: tenantData.stripe_customer_id,
   })
 
-  const stripe    = getStripe()
+  const stripe  = getStripe()
   const errors: string[] = []
 
   for (let i = 0; i < allSubs.length; i++) {
@@ -320,7 +235,6 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
     const position = Math.min(i + 1, 3) as 1 | 2 | 3
     const priceId  = getPlanPriceId(newPlan, position)
 
-    // DB: immediate
     const newIncluded  = PLAN_INCLUDED_USERS[newPlan]
     const newUserLimit = isDowngrade
       ? Math.min(s.user_limit ?? newIncluded, newIncluded)
@@ -330,7 +244,6 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
       .update({ plan: newPlan, user_limit: newUserLimit })
       .eq('tenant_id', tenantId).eq('product', s.product)
 
-    // Stripe: period end
     if (priceId && s.stripe_subscription_id) {
       try {
         const existing = await stripe.subscriptions.retrieve(s.stripe_subscription_id)
@@ -362,13 +275,7 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
 }
 
 // ─── addTool ──────────────────────────────────────────────────────────────────
-/**
- * Add a new ClearStride product to this tenant's suite.
- * The new tool inherits the current tier and gets the bundle discount.
- *
- * Position 1 = full price, position 2 = 15% off, position 3 = 20% off.
- * All tools must be at the same tier — new tool inherits current plan.
- */
+
 export async function addTool(newProduct: Product): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
   if ('error' in ctx) return { success: false, error: ctx.error }
@@ -377,13 +284,11 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
   const platform    = createPlatformClient()
   const currentTool = getProduct()
 
-  // Get current tool's plan to determine tier for the new tool
   const { data: currentSub } = await platform.schema('platform').from('product_subscriptions')
     .select('plan, status').eq('tenant_id', tenantId).eq('product', currentTool).single()
 
   const currentPlan = (currentSub?.plan ?? 'trial') as Plan
 
-  // Check new product isn't already subscribed
   const { data: existing } = await platform.schema('platform').from('product_subscriptions')
     .select('status').eq('tenant_id', tenantId).eq('product', newProduct).single()
 
@@ -396,7 +301,6 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
   const discount    = newPosition === 2 ? BUNDLE_DISCOUNTS.second : newPosition === 3 ? BUNDLE_DISCOUNTS.third : 0
   const priceId     = getPlanPriceId(currentPlan, newPosition)
 
-  // Insert or update product_subscriptions for the new product
   const newIncluded = PLAN_INCLUDED_USERS[currentPlan]
   await platform.schema('platform').from('product_subscriptions')
     .upsert({
@@ -407,15 +311,13 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
       user_limit: newIncluded,
     }, { onConflict: 'tenant_id,product' })
 
-  // Stripe: create new subscription for new product if not trial
   if (priceId) {
     const { data: tenantData } = await platform.schema('platform').from('tenants')
       .select('id, subdomain, company_name, stripe_customer_id').eq('id', tenantId).single()
     if (!tenantData) return { success: false, error: 'Tenant not found' }
 
     const subdomain  = await getCurrentSubdomain()
-    const appDomain  = process.env[`NEXT_PUBLIC_${newProduct.replace('baseline', '').toUpperCase()}_DOMAIN`]
-      ?? `${newProduct.replace('baseline', '')}.com`
+    const appDomain  = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'clearstridetools.com'
     const customerId = await getOrCreateStripeCustomer({
       tenantId, email: user.email ?? '',
       companyName: tenantData.company_name ?? tenantData.subdomain,
@@ -424,8 +326,6 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
 
     const stripe  = getStripe()
     const baseUrl = `https://${subdomain}.${appDomain}`
-
-    // For new tools, send to Checkout (they need to enter payment details for the new sub)
     const session = await createCheckoutSession({
       customerId, priceId, tenantId,
       successUrl: `${baseUrl}/admin/billing?success=true`,
@@ -444,11 +344,7 @@ export async function addTool(newProduct: Product): Promise<BillingActionResult>
 }
 
 // ─── adjustSeats ──────────────────────────────────────────────────────────────
-/**
- * Add or remove seats. Price per seat depends on current plan (starter=$5, pro=$7).
- * Blocks if new limit < active user count.
- * Blocks if new limit >= CUSTOM_CONTRACT_SEAT_THRESHOLD (200+).
- */
+
 export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   if (delta === 0) return { success: false, error: 'No change requested' }
 
@@ -468,15 +364,10 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
 
   if (newLimit < 1) return { success: false, error: 'Seat limit cannot go below 1' }
 
-  // Block at custom contract threshold
   if (newLimit >= CUSTOM_CONTRACT_SEAT_THRESHOLD) {
-    return {
-      success: false,
-      error: `${CUSTOM_CONTRACT_SEAT_THRESHOLD}+ seats require a custom contract. Please contact us at support@clearstridetools.com.`,
-    }
+    return { success: false, error: `${CUSTOM_CONTRACT_SEAT_THRESHOLD}+ seats require a custom contract. Please contact us at support@clearstridetools.com.` }
   }
 
-  // Block reduction below active users
   if (delta < 0) {
     const admin = createServiceRoleClient()
     const { count } = await admin.schema('shared').from('users')
@@ -490,24 +381,22 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   await platform.schema('platform').from('product_subscriptions')
     .update({ user_limit: newLimit }).eq('tenant_id', tenantId).eq('product', product)
 
-  // Stripe: period end
+  // Stripe: period end — only bill add-on seats above included
   const seatPriceId = getSeatPriceId(currentPlan)
   if (sub?.stripe_subscription_id && seatPriceId) {
-    const stripe = getStripe()
+    const stripe        = getStripe()
+    const includedSeats = PLAN_INCLUDED_USERS[currentPlan]
+    const addonSeats    = Math.max(newLimit - includedSeats, 0)
     try {
       const existing  = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
       if (existing.status !== 'canceled') {
         const seatItem = existing.items.data.find(i => i.price.id === seatPriceId)
-        // Only bill add-on seats above included amount
-        const includedSeats = PLAN_INCLUDED_USERS[currentPlan]
-        const addonSeats    = Math.max(newLimit - includedSeats, 0)
         const params = addonSeats > 0
           ? { items: seatItem
               ? [{ id: seatItem.id, quantity: addonSeats }]
               : [{ price: seatPriceId, quantity: addonSeats }],
             proration_behavior: 'none' as const, billing_cycle_anchor: 'unchanged' as const }
           : seatItem
-            // Remove the add-on item entirely if no longer needed
             ? { items: [{ id: seatItem.id, deleted: true }],
                 proration_behavior: 'none' as const, billing_cycle_anchor: 'unchanged' as const }
             : null
@@ -525,10 +414,7 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
 }
 
 // ─── adjustStorage ────────────────────────────────────────────────────────────
-/**
- * Add or remove storage in 10GB blocks. BaselineDocs only.
- * $5/block/month for both plans.
- */
+
 export async function adjustStorage(deltaBlocks: number): Promise<BillingActionResult> {
   if (deltaBlocks === 0) return { success: false, error: 'No change requested' }
 
@@ -554,14 +440,14 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
   await platform.schema('platform').from('product_subscriptions')
     .update({ storage_limit_gb: newGB }).eq('tenant_id', tenantId).eq('product', product)
 
-  // Stripe: period end — only charge blocks above included amount
+  // Stripe: period end — only bill blocks above included
   const storagePriceId = process.env.STRIPE_PRICE_STORAGE_10GB
   if (sub?.stripe_subscription_id && storagePriceId) {
     const stripe        = getStripe()
     const includedGB    = PLAN_INCLUDED_STORAGE_GB[currentPlan]
     const addonBlocks   = Math.max(Math.floor((newGB - includedGB) / STORAGE_BLOCK_GB), 0)
     try {
-      const existing      = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+      const existing    = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
       if (existing.status !== 'canceled') {
         const storageItem = existing.items.data.find(i => i.price.id === storagePriceId)
         const params = addonBlocks > 0
@@ -582,59 +468,5 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
 
   revalidatePath('/admin/billing')
   const dir = deltaBlocks > 0 ? `Added ${deltaBlocks * STORAGE_BLOCK_GB}GB` : `Removed ${Math.abs(deltaBlocks * STORAGE_BLOCK_GB)}GB`
-  return { success: true, message: `${dir} storage. New limit: ${newGB}GB. Billing change at next renewal ($${STORAGE_PRICE_PER_BLOCK}/10GB block/mo above ${PLAN_INCLUDED_STORAGE_GB[currentPlan]}GB included).` }
-}
-
-// ─── Feature/limit lookup (for UI and soft-limit enforcement) ─────────────────
-
-export type ProductLimits = {
-  users:            number
-  documents?:       number
-  storageGb?:       number
-  projects?:        number
-  reqsPerProject?:  number
-  items?:           number
-  bomsBuilds?:      number
-}
-
-export function getProductLimits(product: Product, plan: Plan): ProductLimits {
-  const users = PLAN_INCLUDED_USERS[plan]
-  if (product === 'baselinedocs') return {
-    users,
-    documents:  plan === 'trial' ? 25 : plan === 'starter' ? 100 : 1000,
-    storageGb:  PLAN_INCLUDED_STORAGE_GB[plan],
-  }
-  if (product === 'baselinereqs') return {
-    users,
-    projects:        plan === 'trial' ? 1  : plan === 'starter' ? 3   : 20,
-    reqsPerProject:  plan === 'trial' ? 25 : plan === 'starter' ? 150 : 1000,
-  }
-  return { // baselineinventory
-    users,
-    items:      plan === 'trial' ? 25  : plan === 'starter' ? 250  : 5000,
-    bomsBuilds: plan === 'trial' ? 2   : plan === 'starter' ? 10   : 25,
-  }
-}
-
-export function getPlanFeatures(product: Product): Record<Plan, string[]> {
-  const base: Record<Plan, string[]> = {
-    trial:   ['2 users included', '30-day trial', 'Email support'],
-    starter: ['10 users included', '$5/extra seat/mo', 'Email support'],
-    pro:     ['25 users included', '$7/extra seat/mo', 'Priority support'],
-  }
-  if (product === 'baselinedocs') return {
-    trial:   [...base.trial,   '25 documents', '1GB storage'],
-    starter: [...base.starter, '100 documents', '5GB storage', 'Version control', 'Approval workflows'],
-    pro:     [...base.pro,     '1,000 documents', '20GB storage', 'Document analytics', 'Custom doc types'],
-  }
-  if (product === 'baselinereqs') return {
-    trial:   [...base.trial,   '1 project', '25 requirements/project'],
-    starter: [...base.starter, '3 projects', '150 requirements/project', 'Traceability'],
-    pro:     [...base.pro,     '20 projects', '1,000 requirements/project', 'Baseline snapshots', 'Custom attributes'],
-  }
-  return {
-    trial:   [...base.trial,   '25 items', '2 BOMs/Builds'],
-    starter: [...base.starter, '250 items', '10 BOMs/Builds', 'Barcode scanning'],
-    pro:     [...base.pro,     '5,000 items', '25 BOMs/Builds', 'Multi-location', 'Lot/serial tracking'],
-  }
+  return { success: true, message: `${dir} storage. New limit: ${newGB}GB. Billing change at next renewal.` }
 }
