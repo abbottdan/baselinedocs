@@ -33,6 +33,7 @@ export interface BillingManagementPanelProps {
   userLimit:           number
   activeUserCount:     number
   storageLimitGb:      number | null   // null for Reqs and Inventory
+  storageUsedGb:       number          // 0 for non-Docs products
   paymentMethodBrand:  string | null
   paymentMethodLast4:  string | null
   // Suite context
@@ -289,17 +290,19 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
 }) {
   const router             = useRouter()
   const [isPending, start] = useTransition()
-  const [delta, setDelta]  = useState(0)
+  const [delta, setDelta]  = useState(0)  // how many seats to ADD (starts at 0)
 
-  const newLimit      = userLimit + delta
-  const includedSeats = (PLAN_INCLUDED_USERS[currentPlan] ?? 0)
-  const seatPrice     = (SEAT_ADDON_PRICE[currentPlan] ?? 0)
-  const addonSeats    = Math.max(newLimit - includedSeats, 0)
-  const addonCost     = addonSeats * seatPrice
-  const pct           = Math.min(Math.round((activeUserCount / Math.max(newLimit, 1)) * 100), 100)
-  const barColor      = pct >= 100 ? '#DC2626' : pct >= 90 ? '#D97706' : pct >= 75 ? '#D97706' : '#15803D'
-  const atCustomThreshold = newLimit >= CUSTOM_CONTRACT_SEAT_THRESHOLD
+  const newTotal          = userLimit + delta
+  const includedSeats     = (PLAN_INCLUDED_USERS[currentPlan] ?? 0)
+  const seatPrice         = (SEAT_ADDON_PRICE[currentPlan] ?? 0)
+  const newAddonSeats     = Math.max(newTotal - includedSeats, 0)
+  const newAddonCost      = newAddonSeats * seatPrice
+  const pct               = Math.min(Math.round((activeUserCount / Math.max(userLimit, 1)) * 100), 100)
+  const barColor          = pct >= 100 ? '#DC2626' : pct >= 90 ? '#D97706' : pct >= 75 ? '#D97706' : '#15803D'
+  const atCustomThreshold = newTotal >= CUSTOM_CONTRACT_SEAT_THRESHOLD
   const trialPlan         = currentPlan === 'trial'
+  // Can't remove seats below current usage or below included seats
+  const canDecrease       = delta > 0 || (userLimit > Math.max(activeUserCount, includedSeats))
 
   async function handleApply() {
     if (delta === 0) return
@@ -313,9 +316,10 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
   return (
     <SectionCard
       title="User Seats"
-      description={trialPlan ? 'Seat add-ons available on Starter and Pro plans.' : `${includedSeats} included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${seatPrice}/seat/mo. Billing change at next renewal.`}
+      description={trialPlan ? 'Seat add-ons available on Starter and Pro plans.' : `${includedSeats} seats included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${seatPrice}/seat/mo, billed at next renewal.`}
     >
       <div className="space-y-4">
+        {/* Usage bar */}
         <div>
           <div className="flex justify-between text-sm mb-1.5">
             <span className="text-slate-600">{activeUserCount} of {userLimit} seats used</span>
@@ -329,12 +333,13 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
 
         {!trialPlan && (
           <div className="flex items-center gap-4 flex-wrap">
+            {/* Delta stepper — shows how many to add/remove, not the total */}
             <div className="flex items-center border border-slate-200 rounded">
-              <button onClick={() => setDelta(d => d - 1)}
-                disabled={newLimit <= Math.max(activeUserCount, 1) || isPending}
+              <button onClick={() => setDelta(d => Math.max(d - 1, -(userLimit - Math.max(activeUserCount, includedSeats))))}
+                disabled={!canDecrease || isPending}
                 className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">−</button>
               <div className="px-4 py-2 text-center min-w-[64px]">
-                <div className="text-lg font-bold text-slate-900">{newLimit}</div>
+                <div className="text-lg font-bold text-slate-900">{delta >= 0 ? `+${delta}` : delta}</div>
                 <div className="text-xs text-slate-400">seats</div>
               </div>
               <button onClick={() => setDelta(d => d + 1)}
@@ -342,28 +347,37 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
                 className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">+</button>
             </div>
 
-            <div className="text-sm text-slate-500 flex-1">
-              {delta !== 0
-                ? <span className={delta > 0 ? 'text-green-700' : 'text-red-700'}>
-                    {delta > 0 ? `+${delta}` : delta} seat{Math.abs(delta) > 1 ? 's' : ''}
-                    {addonCost > 0 ? ` · $${addonCost}/mo add-on at next renewal` : ''}
-                  </span>
-                : addonCost > 0
-                  ? <span>${addonCost}/mo add-on ({addonSeats} × ${seatPrice})</span>
-                  : <span className="text-green-700">{includedSeats} seats included</span>
-              }
+            {/* Preview */}
+            <div className="text-sm text-slate-500 flex-1 space-y-0.5">
+              {delta !== 0 ? (
+                <>
+                  <div className={delta > 0 ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>
+                    New total: {newTotal} seats
+                  </div>
+                  <div className="text-slate-400 text-xs">
+                    {newAddonCost > 0
+                      ? `$${newAddonCost}/mo add-on (${newAddonSeats} × $${seatPrice}) at next renewal`
+                      : delta < 0 ? 'No add-on charge at next renewal' : ''}
+                  </div>
+                </>
+              ) : (
+                <div className="text-slate-400">
+                  Current: {userLimit} seats
+                  {userLimit > includedSeats && ` (${userLimit - includedSeats} add-on × $${seatPrice}/mo)`}
+                </div>
+              )}
             </div>
 
             {delta !== 0 && (
-              <button onClick={handleApply} disabled={isPending || atCustomThreshold}
+              <button onClick={handleApply} disabled={isPending || (delta > 0 && atCustomThreshold)}
                 className="px-4 py-2 text-sm font-medium bg-slate-900 text-white rounded hover:bg-slate-700 disabled:opacity-50">
-                {isPending ? 'Saving…' : 'Apply'}
+                {isPending ? 'Saving…' : delta > 0 ? `Add ${delta} seat${delta > 1 ? 's' : ''}` : `Remove ${Math.abs(delta)} seat${Math.abs(delta) > 1 ? 's' : ''}`}
               </button>
             )}
           </div>
         )}
 
-        {atCustomThreshold && (
+        {atCustomThreshold && delta > 0 && (
           <p className="text-xs text-red-700 font-medium">
             200+ seats require a custom contract.{' '}
             <a href="mailto:support@clearstridetools.com?subject=Custom%20Contract%20Enquiry" className="underline">Contact us</a>
@@ -376,16 +390,22 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
 
 // ─── Storage section (Docs only) ──────────────────────────────────────────────
 
-function StorageSection({ currentPlan, storageLimitGb }: { currentPlan: Plan; storageLimitGb: number }) {
+function StorageSection({ currentPlan, storageLimitGb, storageUsedGb }: {
+  currentPlan: Plan; storageLimitGb: number; storageUsedGb: number
+}) {
   const router             = useRouter()
   const [isPending, start] = useTransition()
-  const [delta, setDelta]  = useState(0)
+  const [delta, setDelta]  = useState(0)  // how many 10GB blocks to ADD (starts at 0)
 
-  const includedGB    = (PLAN_INCLUDED_STORAGE_GB[currentPlan] ?? 0)
-  const newGB         = storageLimitGb + (delta * STORAGE_BLOCK_GB)
-  const addonBlocks   = Math.max(Math.floor((newGB - includedGB) / STORAGE_BLOCK_GB), 0)
-  const addonCost     = addonBlocks * STORAGE_PRICE_PER_BLOCK
-  const trialPlan     = currentPlan === 'trial'
+  const newTotalGB      = storageLimitGb + (delta * STORAGE_BLOCK_GB)
+  const includedGB      = (PLAN_INCLUDED_STORAGE_GB[currentPlan] ?? 0)
+  const newAddonBlocks  = Math.max(Math.floor((newTotalGB - includedGB) / STORAGE_BLOCK_GB), 0)
+  const newAddonCost    = newAddonBlocks * STORAGE_PRICE_PER_BLOCK
+  const trialPlan       = currentPlan === 'trial'
+  const usedPct         = Math.min(Math.round((storageUsedGb / Math.max(storageLimitGb, 1)) * 100), 100)
+  const barColor        = usedPct >= 100 ? '#DC2626' : usedPct >= 90 ? '#D97706' : usedPct >= 75 ? '#D97706' : '#15803D'
+  // Can't remove blocks below included amount
+  const canDecrease     = delta > 0 || (storageLimitGb > includedGB + STORAGE_BLOCK_GB)
 
   async function handleApply() {
     if (delta === 0) return
@@ -399,39 +419,65 @@ function StorageSection({ currentPlan, storageLimitGb }: { currentPlan: Plan; st
   return (
     <SectionCard
       title="Storage"
-      description={trialPlan ? `1GB included in trial. Storage add-ons available on Starter and Pro.` : `${includedGB}GB included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${STORAGE_PRICE_PER_BLOCK}/10GB block/mo. Billing change at next renewal.`}
+      description={trialPlan ? '1GB included in trial. Storage add-ons available on Starter and Pro.' : `${includedGB}GB included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${STORAGE_PRICE_PER_BLOCK}/10GB block/mo, billed at next renewal.`}
     >
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center border border-slate-200 rounded">
-          <button onClick={() => setDelta(d => d - 1)}
-            disabled={newGB <= STORAGE_BLOCK_GB || isPending || trialPlan}
-            className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">−</button>
-          <div className="px-4 py-2 text-center min-w-[76px]">
-            <div className="text-lg font-bold text-slate-900">{newGB}GB</div>
-            <div className="text-xs text-slate-400">storage</div>
+      <div className="space-y-4">
+        {/* Usage bar */}
+        <div>
+          <div className="flex justify-between text-sm mb-1.5">
+            <span className="text-slate-600">{storageUsedGb}GB of {storageLimitGb}GB used</span>
+            <span className="text-slate-400 text-xs">{usedPct}%</span>
           </div>
-          <button onClick={() => setDelta(d => d + 1)}
-            disabled={isPending || trialPlan}
-            className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">+</button>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div style={{ width: `${usedPct}%`, backgroundColor: barColor }} className="h-full rounded-full transition-all duration-300" />
+          </div>
+          {usedPct >= 90 && <p className="text-xs text-amber-600 mt-1">Approaching storage limit — consider adding more.</p>}
         </div>
 
-        <div className="text-sm text-slate-500 flex-1">
-          {delta !== 0
-            ? <span className={delta > 0 ? 'text-green-700' : 'text-red-700'}>
-                {delta > 0 ? `+${delta * STORAGE_BLOCK_GB}GB` : `${delta * STORAGE_BLOCK_GB}GB`}
-                {addonCost > 0 ? ` · $${addonCost}/mo at next renewal` : ''}
-              </span>
-            : addonCost > 0
-              ? <span>${addonCost}/mo add-on ({addonBlocks} × ${STORAGE_PRICE_PER_BLOCK})</span>
-              : <span className="text-green-700">{includedGB}GB included</span>
-          }
-        </div>
+        {!trialPlan && (
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Delta stepper — shows blocks to add/remove */}
+            <div className="flex items-center border border-slate-200 rounded">
+              <button onClick={() => setDelta(d => Math.max(d - 1, -(Math.floor((storageLimitGb - includedGB) / STORAGE_BLOCK_GB))))}
+                disabled={!canDecrease || isPending}
+                className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">−</button>
+              <div className="px-4 py-2 text-center min-w-[80px]">
+                <div className="text-lg font-bold text-slate-900">{delta >= 0 ? `+${delta * STORAGE_BLOCK_GB}` : delta * STORAGE_BLOCK_GB}GB</div>
+                <div className="text-xs text-slate-400">{Math.abs(delta)} block{Math.abs(delta) !== 1 ? 's' : ''}</div>
+              </div>
+              <button onClick={() => setDelta(d => d + 1)}
+                disabled={isPending}
+                className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-medium">+</button>
+            </div>
 
-        {delta !== 0 && !trialPlan && (
-          <button onClick={handleApply} disabled={isPending}
-            className="px-4 py-2 text-sm font-medium bg-slate-900 text-white rounded hover:bg-slate-700 disabled:opacity-50">
-            {isPending ? 'Saving…' : 'Apply'}
-          </button>
+            {/* Preview */}
+            <div className="text-sm text-slate-500 flex-1 space-y-0.5">
+              {delta !== 0 ? (
+                <>
+                  <div className={delta > 0 ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>
+                    New total: {newTotalGB}GB
+                  </div>
+                  <div className="text-slate-400 text-xs">
+                    {newAddonCost > 0
+                      ? `$${newAddonCost}/mo add-on (${newAddonBlocks} × $${STORAGE_PRICE_PER_BLOCK}) at next renewal`
+                      : 'No add-on charge at next renewal'}
+                  </div>
+                </>
+              ) : (
+                <div className="text-slate-400">
+                  Current: {storageLimitGb}GB
+                  {storageLimitGb > includedGB && ` (${(storageLimitGb - includedGB) / STORAGE_BLOCK_GB} add-on block${(storageLimitGb - includedGB) / STORAGE_BLOCK_GB !== 1 ? 's' : ''} × $${STORAGE_PRICE_PER_BLOCK}/mo)`}
+                </div>
+              )}
+            </div>
+
+            {delta !== 0 && (
+              <button onClick={handleApply} disabled={isPending}
+                className="px-4 py-2 text-sm font-medium bg-slate-900 text-white rounded hover:bg-slate-700 disabled:opacity-50">
+                {isPending ? 'Saving…' : delta > 0 ? `Add ${delta * STORAGE_BLOCK_GB}GB` : `Remove ${Math.abs(delta * STORAGE_BLOCK_GB)}GB`}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </SectionCard>
@@ -521,6 +567,7 @@ export default function BillingManagementPanel(props: BillingManagementPanelProp
         <StorageSection
           currentPlan={props.currentPlan}
           storageLimitGb={props.storageLimitGb!}
+          storageUsedGb={props.storageUsedGb}
         />
       )}
 

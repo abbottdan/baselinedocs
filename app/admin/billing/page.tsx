@@ -58,6 +58,18 @@ export default async function DocsBillingPage() {
 
   const currentPlan = normalizePlan(sub?.plan)
 
+  // Storage usage — sum of file sizes in docs.document_files for this tenant
+  let storageUsedGb = 0
+  const { data: storageData } = await supabaseAdmin
+    .schema('docs')
+    .from('document_files')
+    .select('file_size, documents!inner(tenant_id)')
+    .eq('documents.tenant_id', tenantId)
+  if (storageData) {
+    const totalBytes = storageData.reduce((sum: number, f: any) => sum + (f.file_size ?? 0), 0)
+    storageUsedGb = parseFloat((totalBytes / (1024 ** 3)).toFixed(2))
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -74,6 +86,7 @@ export default async function DocsBillingPage() {
         userLimit={sub?.user_limit ?? 2}
         activeUserCount={activeUserCount ?? 0}
         storageLimitGb={sub?.storage_limit_gb ?? 1}
+        storageUsedGb={storageUsedGb}
         paymentMethodBrand={sub?.payment_method_brand ?? null}
         paymentMethodLast4={sub?.payment_method_last4 ?? null}
         activeToolCount={(allSubs ?? []).length}
