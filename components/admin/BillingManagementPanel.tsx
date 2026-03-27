@@ -38,6 +38,17 @@ export interface BillingManagementPanelProps {
   // Suite context
   activeToolCount:     number
   otherTools:          { product: Product; plan: Plan }[]
+  // Invoice history
+  invoices:            {
+    stripe_invoice_id: string
+    amount_paid:       number
+    currency:          string
+    status:            string | null
+    invoice_pdf:       string | null
+    period_start:      string | null
+    period_end:        string | null
+    created_at:        string
+  }[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -160,10 +171,10 @@ function PlanSection({
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap mb-1">
-            <span className="text-2xl font-bold text-slate-900">{PLAN_NAMES[currentPlan]}</span>
+            <span className="text-2xl font-bold text-slate-900">{PLAN_NAMES[currentPlan] ?? currentPlan}</span>
             <StatusBadge status={status} trialEndsAt={trialEndsAt} />
           </div>
-          <p className="text-sm text-slate-500">${PLAN_PRICES[currentPlan]}/month</p>
+          <p className="text-sm text-slate-500">${PLAN_PRICES[currentPlan] ?? 0}/month</p>
           {currentPeriodEnd && currentPlan !== 'trial' && (
             <p className="text-xs text-slate-400 mt-0.5">Renews {formatDate(currentPeriodEnd)}</p>
           )}
@@ -194,13 +205,13 @@ function PlanSection({
             const isDown      = PLAN_ORDER.indexOf(plan) < currentIdx
             const toolPos     = activeToolCount >= 3 ? 3 : activeToolCount === 2 ? 2 : 1
             const discountPct = toolPos === 2 ? 15 : toolPos === 3 ? 20 : 0
-            const displayPrice = Math.round(PLAN_PRICES[plan] * (1 - discountPct / 100))
+            const displayPrice = Math.round(PLAN_PRICES[plan] ?? 0 * (1 - discountPct / 100))
 
             return (
               <div key={plan} className={`rounded-lg border p-4 flex flex-col gap-3 ${isCurrent ? 'border-slate-300 bg-slate-50' : 'border-slate-200'}`}>
                 <div>
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-semibold text-slate-800">{PLAN_NAMES[plan]}</span>
+                    <span className="font-semibold text-slate-800">{PLAN_NAMES[plan] ?? plan}</span>
                     {discountPct > 0 && !isDown && (
                       <span className="text-xs text-green-700 font-medium bg-green-50 px-1.5 py-0.5 rounded">{discountPct}% bundle off</span>
                     )}
@@ -209,7 +220,7 @@ function PlanSection({
                     <span className="text-xl font-bold text-slate-900">${displayPrice}</span>
                     <span className="text-xs text-slate-400">/mo</span>
                     {discountPct > 0 && !isDown && (
-                      <span className="text-xs text-slate-400 line-through ml-1">${PLAN_PRICES[plan]}</span>
+                      <span className="text-xs text-slate-400 line-through ml-1">${PLAN_PRICES[plan] ?? 0}</span>
                     )}
                   </div>
                 </div>
@@ -281,8 +292,8 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
   const [delta, setDelta]  = useState(0)
 
   const newLimit      = userLimit + delta
-  const includedSeats = PLAN_INCLUDED_USERS[currentPlan]
-  const seatPrice     = SEAT_ADDON_PRICE[currentPlan]
+  const includedSeats = (PLAN_INCLUDED_USERS[currentPlan] ?? 0)
+  const seatPrice     = (SEAT_ADDON_PRICE[currentPlan] ?? 0)
   const addonSeats    = Math.max(newLimit - includedSeats, 0)
   const addonCost     = addonSeats * seatPrice
   const pct           = Math.min(Math.round((activeUserCount / Math.max(newLimit, 1)) * 100), 100)
@@ -302,7 +313,7 @@ function SeatsSection({ currentPlan, userLimit, activeUserCount }: {
   return (
     <SectionCard
       title="User Seats"
-      description={trialPlan ? 'Seat add-ons available on Starter and Pro plans.' : `${includedSeats} included in ${PLAN_NAMES[currentPlan]}. Add-ons: $${seatPrice}/seat/mo. Billing change at next renewal.`}
+      description={trialPlan ? 'Seat add-ons available on Starter and Pro plans.' : `${includedSeats} included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${seatPrice}/seat/mo. Billing change at next renewal.`}
     >
       <div className="space-y-4">
         <div>
@@ -370,7 +381,7 @@ function StorageSection({ currentPlan, storageLimitGb }: { currentPlan: Plan; st
   const [isPending, start] = useTransition()
   const [delta, setDelta]  = useState(0)
 
-  const includedGB    = PLAN_INCLUDED_STORAGE_GB[currentPlan]
+  const includedGB    = (PLAN_INCLUDED_STORAGE_GB[currentPlan] ?? 0)
   const newGB         = storageLimitGb + (delta * STORAGE_BLOCK_GB)
   const addonBlocks   = Math.max(Math.floor((newGB - includedGB) / STORAGE_BLOCK_GB), 0)
   const addonCost     = addonBlocks * STORAGE_PRICE_PER_BLOCK
@@ -388,7 +399,7 @@ function StorageSection({ currentPlan, storageLimitGb }: { currentPlan: Plan; st
   return (
     <SectionCard
       title="Storage"
-      description={trialPlan ? `1GB included in trial. Storage add-ons available on Starter and Pro.` : `${includedGB}GB included in ${PLAN_NAMES[currentPlan]}. Add-ons: $${STORAGE_PRICE_PER_BLOCK}/10GB block/mo. Billing change at next renewal.`}
+      description={trialPlan ? `1GB included in trial. Storage add-ons available on Starter and Pro.` : `${includedGB}GB included in ${PLAN_NAMES[currentPlan] ?? currentPlan}. Add-ons: $${STORAGE_PRICE_PER_BLOCK}/10GB block/mo. Billing change at next renewal.`}
     >
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center border border-slate-200 rounded">
@@ -422,6 +433,56 @@ function StorageSection({ currentPlan, storageLimitGb }: { currentPlan: Plan; st
             {isPending ? 'Saving…' : 'Apply'}
           </button>
         )}
+      </div>
+    </SectionCard>
+  )
+}
+
+// ─── Invoices section ─────────────────────────────────────────────────────────
+
+type Invoice = BillingManagementPanelProps['invoices'][number]
+
+function InvoicesSection({ invoices }: { invoices: Invoice[] }) {
+  if (!invoices.length) return (
+    <SectionCard title="Invoice History">
+      <p className="text-sm text-slate-400">No invoices yet. Invoices will appear here after your first payment.</p>
+    </SectionCard>
+  )
+
+  function fmtAmount(amount: number, currency: string) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100)
+  }
+
+  function fmtPeriod(start: string | null, end: string | null) {
+    if (!start || !end) return '—'
+    const s = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const e = new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${s} – ${e}`
+  }
+
+  return (
+    <SectionCard title="Invoice History">
+      <div className="divide-y divide-slate-100">
+        {invoices.map(inv => (
+          <div key={inv.stripe_invoice_id} className="flex items-center justify-between py-3 gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-700">{fmtPeriod(inv.period_start, inv.period_end)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                {inv.status ?? 'pending'}
+              </span>
+              <span className="text-sm font-semibold text-slate-900">{fmtAmount(inv.amount_paid, inv.currency)}</span>
+              {inv.invoice_pdf && (
+                <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-slate-500 underline hover:text-slate-700 whitespace-nowrap">
+                  Download PDF
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </SectionCard>
   )
@@ -485,6 +546,8 @@ export default function BillingManagementPanel(props: BillingManagementPanelProp
         {' · '}
         <a href="mailto:support@clearstridetools.com" className="underline hover:text-slate-600">General support</a>
       </p>
+
+      <InvoicesSection invoices={props.invoices} />
     </div>
   )
 }
