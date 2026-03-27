@@ -118,9 +118,13 @@ export async function changePlan(
 
   // Seat guard on downgrade
   if (isDowngrade) {
+    const productSchema = (process.env.CLEARSTRIDE_PRODUCT ?? 'baselinedocs').replace('baseline', '')
     const admin = createServiceRoleClient()
-    const { count } = await admin.schema('shared').from('users')
-      .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true)
+    const { count } = await admin
+      .schema(productSchema)
+      .from('user_roles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
     const newIncluded = PLAN_INCLUDED_USERS[newPlan]
     if ((count ?? 0) > newIncluded) {
       return { success: false, error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users first.` }
@@ -208,9 +212,13 @@ export async function upgradeSuite(newPlan: 'starter' | 'pro', confirmed: boolea
   const isDowngrade = allSubs.some(s => PLAN_ORDER.indexOf(s.plan as Plan) > PLAN_ORDER.indexOf(newPlan))
 
   if (isDowngrade) {
+    const productSchema = (process.env.CLEARSTRIDE_PRODUCT ?? 'baselinedocs').replace('baseline', '')
     const admin = createServiceRoleClient()
-    const { count } = await admin.schema('shared').from('users')
-      .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true)
+    const { count } = await admin
+      .schema(productSchema)
+      .from('user_roles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
     const newIncluded = PLAN_INCLUDED_USERS[newPlan]
     if ((count ?? 0) > newIncluded) {
       return { success: false, error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users first.` }
@@ -369,9 +377,13 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   }
 
   if (delta < 0) {
+    const productSchema = (process.env.CLEARSTRIDE_PRODUCT ?? 'baselinedocs').replace('baseline', '')
     const admin = createServiceRoleClient()
-    const { count } = await admin.schema('shared').from('users')
-      .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true)
+    const { count } = await admin
+      .schema(productSchema)
+      .from('user_roles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
     if ((count ?? 0) > newLimit) {
       return { success: false, error: `Cannot reduce to ${newLimit} seats — you have ${count} active users. Deactivate users first.` }
     }

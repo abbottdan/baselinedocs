@@ -38,8 +38,15 @@ export default async function DocsBillingPage() {
     .select('product, plan').eq('tenant_id', tenantId).in('status', ['active', 'trialing'])
   const otherTools = (allSubs ?? []).filter(s => s.product !== 'baselinedocs') as { product: Product; plan: Plan }[]
 
-  const { count: activeUserCount } = await supabaseAdmin.schema('shared').from('users')
-    .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true)
+  // Count seats from the product-specific user_roles table —
+  // a user only consumes a Docs seat if they've been explicitly added to Docs.
+  // Using service role to bypass RLS on the product schema.
+  const productSchema = 'docs'
+  const { count: activeUserCount } = await supabaseAdmin
+    .schema(productSchema)
+    .from('user_roles')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
 
   // Invoice history from platform.invoices (populated by Stripe webhook)
   const { data: invoices } = await platform.schema('platform').from('invoices')
