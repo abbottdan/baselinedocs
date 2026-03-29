@@ -108,7 +108,7 @@ export async function changePlan(
   forceCheckout = false
 ): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { user, tenantId } = ctx
 
   const platform = createPlatformClient()
@@ -231,7 +231,7 @@ export async function upgradeSuite(
   _confirmed = true
 ): Promise<BillingActionResult> {
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { tenantId } = ctx
 
   const platform = createPlatformClient()
@@ -316,7 +316,7 @@ export async function adjustSeats(delta: number): Promise<BillingActionResult> {
   if (delta === 0) return { success: false, error: 'No change requested' }
 
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { tenantId } = ctx
 
   const platform = createPlatformClient()
@@ -416,7 +416,7 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
   }
 
   const ctx = await getAdminContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
+  if ('error' in ctx) return { success: false, error: ctx.error ?? 'Unknown error' }
   const { tenantId } = ctx
 
   const platform = createPlatformClient()
@@ -483,3 +483,6 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
     message: `${dir}. New limit: ${newGB}GB. Billing change at next renewal.`,
   }
 }
+
+// Alias for backwards compatibility with UpgradePlanDialog
+export const upgradeTenantPlan = changePlan
