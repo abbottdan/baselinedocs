@@ -484,5 +484,8 @@ export async function adjustStorage(deltaBlocks: number): Promise<BillingActionR
   }
 }
 
-// Alias for backwards compatibility with UpgradePlanDialog
-export const upgradeTenantPlan = changePlan
+// Backwards-compat adapter for UpgradePlanDialog which calls upgradeTenantPlan({ tenantId, newPlan })
+// Our new changePlan signature is changePlan(newPlan: Plan, forceCheckout?)
+export async function upgradeTenantPlan(data: { tenantId: string; newPlan: string; forceCheckout?: boolean }) {
+  return changePlan(data.newPlan as Plan, data.forceCheckout)
+}
