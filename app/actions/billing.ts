@@ -1,592 +1,494 @@
 'use server'
 
-import { createClient , createSharedClient} from '@/lib/supabase/server'
+/**
+ * app/actions/billing.ts — ClearStride Billing Server Actions
+ *
+ * Async server actions only. Pure constants/sync helpers are in
+ * lib/billing/constants.ts (cannot be here due to 'use server' restrictions).
+ *
+ * Actions:
+ *   changePlan    — upgrade or downgrade this product's plan
+ *   upgradeSuite  — upgrade all products simultaneously (suite tenants)
+ *   adjustSeats   — add/remove seats (delta-based, period-end billing)
+ *   adjustStorage — add/remove 10GB storage blocks (Docs only, period-end)
+ */
+
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
-import { cookies } from 'next/headers'
-import { revalidatePath } from 'next/cache'
-import { logger } from '@/lib/logger'
-import { Resend } from 'resend'
-import {
-  stripe,
-  STRIPE_PRICES,
-  getOrCreateStripeCustomer,
-  createCheckoutSession,
-  createBillingPortalSession
-} from '@/lib/stripe/client'
 import { getCurrentSubdomain, getSubdomainTenantId } from '@/lib/tenant'
+import { requireAdmin } from '@/lib/auth/require-admin'
+import { revalidatePath } from 'next/cache'
+import { stripe } from '@/lib/stripe'
+import {
+  PLAN_ORDER, PLAN_INCLUDED_USERS, PLAN_INCLUDED_STORAGE_GB,
+  SEAT_ADDON_PRICE, STORAGE_BLOCK_GB, PLAN_NAMES,
+  type Plan, type Product,
+} from '@/lib/billing/constants'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_BILLING_EMAIL = process.env.FROM_BILLING_EMAIL || 'billing@baselinedocs.com'
-const OWNER_EMAIL = process.env.FEEDBACK_EMAIL || 'abbott.dan@gmail.com'
+// Re-export types so pages/components can import from one place
+export type { Plan, Product }
 
-const PLAN_NAMES: Record<string, string> = {
-  starter: 'Starter',
-  professional: 'Professional',
-  enterprise: 'Enterprise',
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type BillingActionResult =
+  | { success: true;  message: string; checkoutUrl?: string }
+  | { success: false; error: string }
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+function getProduct(): Product {
+  const p = process.env.CLEARSTRIDE_PRODUCT
+  if (!p) throw new Error('CLEARSTRIDE_PRODUCT env var not set')
+  return p as Product
 }
 
-const PLAN_PRICES: Record<string, number> = {
-  starter: 29,
-  professional: 99,
-  enterprise: 299,
-}
-
-/**
- * Send upgrade confirmation email to tenant admin + owner BCC
- */
-async function sendUpgradeConfirmation(params: {
-  toEmail: string
-  companyName: string
-  previousPlan: string
-  newPlan: string
-  subscriptionId: string
-  immediateCharge?: number | null  // proration amount in cents, null for new subscriptions
-  nextBillingDate?: string | null
-  nextBillingAmount?: number | null
-}) {
-  const planName = PLAN_NAMES[params.newPlan] || params.newPlan
-  const prevPlanName = PLAN_NAMES[params.previousPlan] || params.previousPlan
-  const monthlyPrice = PLAN_PRICES[params.newPlan] || 0
-
-  const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  const formatDate = (iso: string | null | undefined) => {
-    if (!iso) return 'N/A'
-    return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'long', day: 'numeric'
-    })
+function getPlanPriceId(plan: Plan, toolPosition: 1 | 2 | 3 = 1): string | undefined {
+  if (plan === 'trial') return undefined
+  if (plan === 'starter') {
+    if (toolPosition === 2) return process.env.STRIPE_PRICE_STARTER_2ND
+    if (toolPosition === 3) return process.env.STRIPE_PRICE_STARTER_3RD
+    return process.env.STRIPE_PRICE_STARTER
   }
-
-  const proratedSection = params.immediateCharge != null
-    ? `
-      <tr>
-        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Prorated charge today</td>
-        <td style="padding: 8px 0; color: #111827; font-size: 14px; text-align: right; font-weight: 600;">${formatCurrency(params.immediateCharge)}</td>
-      </tr>`
-    : ''
-
-  const nextBillingSection = params.nextBillingDate && params.nextBillingAmount != null
-    ? `
-      <tr>
-        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Next billing date</td>
-        <td style="padding: 8px 0; color: #111827; font-size: 14px; text-align: right;">${formatDate(params.nextBillingDate)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Next billing amount</td>
-        <td style="padding: 8px 0; color: #111827; font-size: 14px; text-align: right; font-weight: 600;">${formatCurrency(params.nextBillingAmount)}</td>
-      </tr>`
-    : ''
-
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"></head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; margin: 0; padding: 0;">
-      <div style="max-width: 560px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        
-        <!-- Header -->
-        <div style="background: #1e40af; padding: 32px 40px;">
-          <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">BaselineDocs</h1>
-          <p style="color: #bfdbfe; margin: 8px 0 0; font-size: 14px;">Document Control System</p>
-        </div>
-
-        <!-- Body -->
-        <div style="padding: 40px;">
-          <h2 style="color: #111827; margin: 0 0 8px; font-size: 20px;">Your plan has been upgraded ✓</h2>
-          <p style="color: #6b7280; margin: 0 0 32px; font-size: 15px;">
-            Thank you for upgrading, <strong>${params.companyName}</strong>! Your account has been updated and the new features are available immediately.
-          </p>
-
-          <!-- Plan Change -->
-          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="flex: 1;">
-                <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;">Previous Plan</p>
-                <p style="margin: 4px 0 0; font-size: 16px; color: #374151; font-weight: 500;">${prevPlanName}</p>
-              </div>
-              <div style="color: #9ca3af; font-size: 20px;">→</div>
-              <div style="flex: 1; text-align: right;">
-                <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;">New Plan</p>
-                <p style="margin: 4px 0 0; font-size: 18px; color: #15803d; font-weight: 700;">${planName}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Billing Summary -->
-          <h3 style="color: #374151; font-size: 15px; font-weight: 600; margin: 0 0 12px;">Billing Summary</h3>
-          <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #e5e7eb;">
-            <tbody>
-              <tr>
-                <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">New monthly rate</td>
-                <td style="padding: 8px 0; color: #111827; font-size: 14px; text-align: right;">$${monthlyPrice}/month</td>
-              </tr>
-              ${proratedSection}
-              ${nextBillingSection}
-            </tbody>
-          </table>
-
-          <!-- Subscription ID -->
-          <p style="color: #9ca3af; font-size: 12px; margin: 24px 0 0;">
-            Subscription ID: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${params.subscriptionId}</code>
-          </p>
-
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-
-          <p style="color: #6b7280; font-size: 13px; margin: 0;">
-            Questions about your billing? Reply to this email or visit your 
-            <a href="https://app.baselinedocs.com/admin/billing" style="color: #1e40af;">billing dashboard</a>.
-          </p>
-        </div>
-
-        <!-- Footer -->
-        <div style="background: #f9fafb; padding: 24px 40px; border-top: 1px solid #e5e7eb;">
-          <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-            BaselineDocs · Document Control System<br>
-            This is a transactional email regarding your account.
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
-
-  try {
-    await resend.emails.send({
-      from: FROM_BILLING_EMAIL,
-      to: params.toEmail,
-      bcc: OWNER_EMAIL,
-      subject: `Your BaselineDocs plan has been upgraded to ${planName}`,
-      html,
-    })
-    logger.info('🟢 [Billing] Upgrade confirmation email sent', {
-      to: params.toEmail,
-      plan: params.newPlan
-    })
-  } catch (err) {
-    // Non-fatal - log but don't fail the upgrade
-    logger.error('🟡 [Billing] Failed to send upgrade email (non-fatal)', { error: err })
+  if (plan === 'pro') {
+    if (toolPosition === 2) return process.env.STRIPE_PRICE_PRO_2ND
+    if (toolPosition === 3) return process.env.STRIPE_PRICE_PRO_3RD
+    return process.env.STRIPE_PRICE_PRO
   }
+  return undefined
 }
 
-/**
- * Upgrade tenant plan (tenant admin action)
- */
-export async function upgradeTenantPlan(data: {
-  tenantId: string
-  newPlan: string
-  forceCheckout?: boolean
-}) {
+function getSeatPriceId(plan: Plan): string | undefined {
+  if (plan === 'starter') return process.env.STRIPE_PRICE_SEAT_STARTER
+  if (plan === 'pro')     return process.env.STRIPE_PRICE_SEAT_PRO
+  return undefined
+}
+
+async function getAdminContext() {
   const supabase = await createClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) return { error: 'Not authenticated' } as const
+  const { isAdmin } = await requireAdmin(user.id, supabase)
+  if (!isAdmin) return { error: 'Admin access required' } as const
+  const tenantId = await getSubdomainTenantId()
+  if (!tenantId) return { error: 'Tenant not found' } as const
+  return { user, tenantId }
+}
 
-  logger.info('🔵 [Billing] upgradeTenantPlan called', {
-    tenantId: data.tenantId,
-    newPlan: data.newPlan
+async function getActiveToolCount(
+  tenantId: string,
+  platform: ReturnType<typeof createPlatformClient>
+): Promise<number> {
+  const { data } = await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .select('product')
+    .eq('tenant_id', tenantId)
+    .in('status', ['active', 'trialing'])
+  return data?.length ?? 1
+}
+
+async function getOrCreateStripeCustomer(opts: {
+  tenantId: string
+  email: string
+  companyName: string
+  existingCustomerId: string | null
+}): Promise<string> {
+  if (opts.existingCustomerId) return opts.existingCustomerId
+
+  const customer = await stripe.customers.create({
+    email: opts.email,
+    name:  opts.companyName,
+    metadata: { tenant_id: opts.tenantId },
   })
 
-  try {
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+  await createPlatformClient()
+    .schema('platform')
+    .from('tenants')
+    .update({ stripe_customer_id: customer.id })
+    .eq('id', opts.tenantId)
 
-    if (userError || !user) {
-      logger.error('🔴 [Billing] User authentication failed', { error: userError })
-      return { success: false, error: 'You must be logged in' }
-    }
+  return customer.id
+}
 
-    logger.info('🟢 [Billing] User authenticated', { userId: user.id, email: user.email })
+// ─── changePlan ───────────────────────────────────────────────────────────────
 
-    // Validate plan
-    const validPlans = ['starter', 'professional', 'enterprise'] as const
-    if (!validPlans.includes(data.newPlan as any)) {
-      logger.error('🔴 [Billing] Invalid plan', { plan: data.newPlan })
-      return { success: false, error: 'Invalid plan selected' }
-    }
+export async function changePlan(
+  newPlan: Plan,
+  forceCheckout = false
+): Promise<BillingActionResult> {
+  const ctx = await getAdminContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const { user, tenantId } = ctx
 
-    // Get subdomain to verify tenant context
-    // Get subdomain and tenant ID
-    const subdomain = await getCurrentSubdomain()
-    const subdomainTenantId = await getSubdomainTenantId()
+  const platform = createPlatformClient()
+  const product  = getProduct()
 
-    if (!subdomainTenantId || !subdomain) {
-      logger.error('🔴 [Billing] Tenant not found for subdomain')
-      return { success: false, error: 'Tenant context not found' }
-    }
+  const { data: sub } = await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .select('plan, user_limit, stripe_subscription_id')
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
+    .single()
 
-        logger.info('🟢 [Billing] Subdomain tenant found', { subdomainTenantId })
+  const currentPlan = (sub?.plan ?? 'trial') as Plan
+  const isDowngrade = PLAN_ORDER.indexOf(newPlan) < PLAN_ORDER.indexOf(currentPlan)
 
-    // Verify the request's tenantId matches the subdomain tenant (security check)
-    if (data.tenantId !== subdomainTenantId) {
-      logger.error('🔴 [Billing] Tenant mismatch', {
-        subdomainTenantId,
-        requestedTenant: data.tenantId
-      })
-      return { success: false, error: 'Tenant mismatch' }
-    }
-
-    // Fetch full tenant data (including company_name)
-    const { data: tenantData } = await createPlatformClient()
-        .schema('platform')
-        .from('tenants')
-        .select('id, subdomain, company_name')
-        .eq('id', subdomainTenantId)
-        .single()
-
-    if (!tenantData) {
-      logger.error('🔴 [Billing] Failed to fetch tenant data', { subdomainTenantId })
-      return { success: false, error: 'Tenant data not found' }
-    }
-
-    logger.info('🟢 [Billing] Tenant verified', {
-      tenantId: tenantData.id,
-      companyName: tenantData.company_name
-    })
-
-    // Continue using tenantData.company_name...
-
-    // Check admin status
-    const sharedClient = createSharedClient()
-      const { data: _su } = await sharedClient
-        .schema('shared').from('users')
-        .select('is_master_admin, tenant_id, email')
-        .eq('id', user.id).single()
-      let _billingIsAdmin = _su?.is_master_admin ?? false
-      if (_su && !_su.is_master_admin) {
-        const { data: rr } = await supabase.schema('docs').from('user_roles')
-          .select('role').eq('user_id', user.id).eq('tenant_id', _su.tenant_id).single()
-        _billingIsAdmin = ['tenant_admin','master_admin'].includes(rr?.role ?? '')
-      }
-      const userData = { is_admin: _billingIsAdmin, tenant_id: _su?.tenant_id, email: _su?.email ?? user.email }
-
-    if (!userData?.is_admin || userData.tenant_id !== data.tenantId) {
-      logger.error('🔴 [Billing] Permission denied', {
-        isAdmin: userData?.is_admin,
-        userTenant: userData?.tenant_id,
-        requestedTenant: data.tenantId
-      })
-      return { success: false, error: 'Only tenant administrators can upgrade plans' }
-    }
-
-    logger.info('🟢 [Billing] Admin permissions verified')
-
-    // Get current billing info
-    const { data: currentBilling } = await createPlatformClient()
-        .schema('platform')
-        .from('product_subscriptions')
-        .select('plan, status, stripe_customer_id, stripe_subscription_id')
-        .eq('tenant_id', data.tenantId)
-        .eq('product', 'baselinedocs')
-        .single()
-
-    logger.info('🟢 [Billing] Current billing retrieved', {
-      currentPlan: currentBilling?.plan,
-      stripeCustomerId: currentBilling?.stripe_customer_id,
-      stripeSubscriptionId: currentBilling?.stripe_subscription_id
-    })
-
-    // Validate upgrade (can only go up, not down)
-    const planOrder = ['trial', 'starter', 'professional', 'enterprise']
-    const currentIndex = planOrder.indexOf(currentBilling?.plan || 'trial')
-    const newIndex = planOrder.indexOf(data.newPlan)
-
-    if (newIndex <= currentIndex) {
-      logger.error('🔴 [Billing] Cannot downgrade', {
-        currentPlan: currentBilling?.plan,
-        newPlan: data.newPlan
-      })
+  // Block downgrade if active users exceed new plan's limit
+  if (isDowngrade) {
+    const admin = createServiceRoleClient()
+    const { count } = await admin
+      .schema('docs')
+      .from('user_roles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+    const newIncluded = PLAN_INCLUDED_USERS[newPlan]
+    if ((count ?? 0) > newIncluded) {
       return {
         success: false,
-        error: 'You can only upgrade to a higher plan. Contact support for downgrades.'
+        error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users first.`,
       }
     }
+  }
 
-    logger.info('🟢 [Billing] Upgrade validation passed', {
-      from: currentBilling?.plan,
-      to: data.newPlan
-    })
+  // DB: update immediately — cap user_limit on downgrade
+  const newIncluded  = PLAN_INCLUDED_USERS[newPlan]
+  const newUserLimit = isDowngrade
+    ? Math.min(sub?.user_limit ?? newIncluded, newIncluded)
+    : (sub?.user_limit ?? PLAN_INCLUDED_USERS[currentPlan])
 
-    // Get or create Stripe customer
-    logger.info('🔵 [Billing] Getting/creating Stripe customer...')
+  await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .update({ plan: newPlan, user_limit: newUserLimit })
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
 
-    const customerId = await getOrCreateStripeCustomer({
-      tenantId: data.tenantId,
-      email: userData.email || '',
-      companyName: tenantData.company_name || tenantData.subdomain,
-      existingCustomerId: currentBilling?.stripe_customer_id,
-    })
+  // Stripe: schedule at period end
+  const toolCount = await getActiveToolCount(tenantId, platform)
+  const position  = Math.min(toolCount, 3) as 1 | 2 | 3
+  const priceId   = getPlanPriceId(newPlan, position)
 
-    logger.info('🟢 [Billing] Stripe customer ready', { customerId })
+  if (!priceId) {
+    // Trial plan or no Stripe price — DB update is sufficient
+    revalidatePath('/admin/billing')
+    return { success: true, message: `Plan changed to ${PLAN_NAMES[newPlan]}.` }
+  }
 
-    // Get price ID for the new plan
-    const priceId = STRIPE_PRICES[data.newPlan as keyof typeof STRIPE_PRICES]
+  const { data: tenantData } = await platform
+    .schema('platform')
+    .from('tenants')
+    .select('id, subdomain, company_name, stripe_customer_id')
+    .eq('id', tenantId)
+    .single()
+  if (!tenantData) return { success: false, error: 'Tenant not found' }
 
-    if (!priceId) {
-      logger.error('🔴 [Billing] Price ID not configured', { plan: data.newPlan })
-      return { success: false, error: 'Invalid plan configuration' }
-    }
+  const subdomain  = await getCurrentSubdomain()
+  const appDomain  = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'baselinedocs.com'
+  const customerId = await getOrCreateStripeCustomer({
+    tenantId,
+    email:              user.email ?? '',
+    companyName:        tenantData.company_name ?? tenantData.subdomain,
+    existingCustomerId: tenantData.stripe_customer_id,
+  })
 
-    logger.info('🟢 [Billing] Price ID found', { plan: data.newPlan, priceId })
-
-    // Check if they have an existing active subscription
-    if (currentBilling?.stripe_subscription_id && !data.forceCheckout) {
-      logger.info('🔵 [Billing] Existing subscription found - checking status...', {
-        subscriptionId: currentBilling.stripe_subscription_id
-      })
-
-      // Retrieve and check subscription status before updating
-      const subscription = await stripe.subscriptions.retrieve(
-        currentBilling.stripe_subscription_id
-      )
-
-      if (subscription.status === 'canceled') {
-        logger.info('🟡 [Billing] Subscription is cancelled - will create new checkout session', {
-          subscriptionId: currentBilling.stripe_subscription_id,
-          status: subscription.status
+  // Try to update existing subscription at period end
+  if (sub?.stripe_subscription_id && !forceCheckout) {
+    try {
+      const existing = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+      if (existing.status !== 'canceled') {
+        await stripe.subscriptions.update(sub.stripe_subscription_id, {
+          items: [{ id: existing.items.data[0].id, price: priceId }],
+          proration_behavior: 'none',
+          billing_cycle_anchor: 'unchanged',
+          metadata: { tenant_id: tenantId, plan: newPlan, product },
         })
-        // Clear the cancelled subscription ID from database so we create a fresh one
-        await createPlatformClient()
-            .schema('platform')
-            .from('product_subscriptions')
-            .update({ stripe_subscription_id: null })
-            .eq('tenant_id', data.tenantId)
-            .eq('product', 'baselinedocs')
-        // Fall through to checkout session creation below
-      } else {
-        logger.info('🔵 [Billing] Updating active subscription...', {
-          subscriptionId: currentBilling.stripe_subscription_id,
-          status: subscription.status
-        })
-
-        await stripe.subscriptions.update(currentBilling.stripe_subscription_id, {
-          items: [{
-            id: subscription.items.data[0].id,
-            price: priceId,
-          }],
-          proration_behavior: 'create_prorations',
-          metadata: {
-            tenant_id: data.tenantId,
-            plan: data.newPlan,
-          },
-        })
-
-        logger.info('🟢 [Billing] Subscription updated in Stripe', {
-          subscriptionId: currentBilling.stripe_subscription_id,
-          newPlan: data.newPlan
-        })
-
-        // Update billing record
-        await createPlatformClient()
-            .schema('platform')
-            .from('product_subscriptions')
-            .update({
-            plan: data.newPlan,
-            stripe_price_id: priceId,
-            updated_at: new Date().toISOString(),
-          })
-            .eq('tenant_id', data.tenantId)
-            .eq('product', 'baselinedocs')
-
-        logger.info('🟢 [Billing] Database updated')
-
-        // Log to billing history
-        await supabase
-          .from('billing_history')
-          .insert({
-            tenant_id: data.tenantId,
-            action: 'plan_upgrade',
-            previous_plan: currentBilling?.plan || 'trial',
-            new_plan: data.newPlan,
-            reason: 'Tenant admin upgrade via billing page',
-            performed_by: user.id,
-            performed_by_email: user.email || '',
-          })
-
-        logger.info('🟢 [Billing] Billing history logged')
-
-        // Fetch upcoming invoice for proration details (optional for email)
-        let immediateCharge: number | null = null
-        let nextBillingDate: string | null = null
-        let nextBillingAmount: number | null = null
-        try {
-          // Try to get upcoming invoice - method name varies by Stripe version
-          const upcoming = await (stripe.invoices as any).retrieveUpcoming?.({ customer: customerId })
-            || await (stripe.invoices as any).upcoming?.({ customer: customerId })
-
-          if (upcoming) {
-            const prorationLines = upcoming.lines?.data?.filter((l: any) => l.proration) || []
-            const prorationTotal = prorationLines.reduce((sum: number, l: any) => sum + l.amount, 0)
-            immediateCharge = prorationTotal > 0 ? prorationTotal : null
-            nextBillingDate = upcoming.next_payment_attempt
-              ? new Date(upcoming.next_payment_attempt * 1000).toISOString()
-              : null
-            nextBillingAmount = upcoming.amount_due
-          }
-        } catch (e) {
-          // Non-fatal - email will just not have proration details
-          logger.info('🟡 [Billing] Could not fetch upcoming invoice (non-fatal)', { error: String(e) })
-        }
-
-        // Send confirmation email
-        await sendUpgradeConfirmation({
-          toEmail: user.email!,
-          companyName: tenantData?.company_name || tenantData?.subdomain,
-          previousPlan: currentBilling?.plan || 'trial',
-          newPlan: data.newPlan,
-          subscriptionId: currentBilling.stripe_subscription_id,
-          immediateCharge,
-          nextBillingDate,
-          nextBillingAmount,
-        })
-
+        await platform
+          .schema('platform')
+          .from('tenants')
+          .update({ stripe_customer_id: customerId })
+          .eq('id', tenantId)
         revalidatePath('/admin/billing')
-
         return {
           success: true,
-          message: 'Plan upgraded successfully!'
+          message: `Plan ${isDowngrade ? 'downgraded' : 'upgraded'} to ${PLAN_NAMES[newPlan]}. Billing change at next renewal.`,
         }
-      } // end else (active subscription)
+      }
+    } catch {
+      // Subscription not found in Stripe — fall through to checkout
     }
+  }
 
-    // No existing subscription (or cancelled) - check for saved payment method first
-    logger.info('🔵 [Billing] No active subscription - checking for saved payment method...')
+  // No active subscription or forceCheckout — go to Stripe Checkout
+  const baseUrl = `https://${subdomain}.${appDomain}`
+  const session = await stripe.checkout.sessions.create({
+    customer:   customerId,
+    mode:       'subscription',
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${baseUrl}/admin/billing?success=true`,
+    cancel_url:  `${baseUrl}/admin/billing?canceled=true`,
+    metadata:    { tenant_id: tenantId, plan: newPlan, product },
+  })
 
-    // Check if the Stripe customer has a payment method saved
-    const stripeCustomer = await stripe.customers.retrieve(customerId, {
-      expand: ['invoice_settings.default_payment_method']
-    }) as any
+  return { success: true, message: 'Redirecting to checkout…', checkoutUrl: session.url ?? undefined }
+}
 
-    let paymentMethodId: string | null = null
+// ─── upgradeSuite ─────────────────────────────────────────────────────────────
 
-    // First check invoice_settings.default_payment_method
-    if (stripeCustomer.invoice_settings?.default_payment_method) {
-      const pm = stripeCustomer.invoice_settings.default_payment_method
-      paymentMethodId = typeof pm === 'string' ? pm : pm.id
-      logger.info('🔵 [Billing] Found default payment method', { paymentMethodId })
-    }
+export async function upgradeSuite(
+  newPlan: 'starter' | 'pro',
+  _confirmed = true
+): Promise<BillingActionResult> {
+  const ctx = await getAdminContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const { tenantId } = ctx
 
-    // If no default, check if customer has any payment methods attached
-    if (!paymentMethodId) {
-      const paymentMethods = await stripe.paymentMethods.list({
-        customer: customerId,
-        type: 'card',
-        limit: 1
-      })
-      if (paymentMethods.data.length > 0) {
-        paymentMethodId = paymentMethods.data[0].id
-        logger.info('🔵 [Billing] Found attached payment method (not set as default)', { paymentMethodId })
+  const platform = createPlatformClient()
+
+  const { data: allSubs } = await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .select('product, plan, stripe_subscription_id, user_limit')
+    .eq('tenant_id', tenantId)
+    .in('status', ['active', 'trialing'])
+
+  if (!allSubs?.length) return { success: false, error: 'No active subscriptions found' }
+
+  const isDowngrade = allSubs.some(
+    s => PLAN_ORDER.indexOf(s.plan as Plan) > PLAN_ORDER.indexOf(newPlan)
+  )
+
+  // Block downgrade if users exceed new plan limit
+  if (isDowngrade) {
+    const admin = createServiceRoleClient()
+    const { count } = await admin
+      .schema('shared')
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('is_master_admin', false)
+    const newIncluded = PLAN_INCLUDED_USERS[newPlan]
+    if ((count ?? 0) > newIncluded) {
+      return {
+        success: false,
+        error: `You have ${count} active users but ${PLAN_NAMES[newPlan]} includes only ${newIncluded}. Deactivate users first.`,
       }
     }
+  }
 
-    if (paymentMethodId && !data.forceCheckout) {
-      // Customer has a saved card - create subscription directly, no Checkout needed
-      logger.info('🔵 [Billing] Saved payment method found - creating subscription directly', {
-        customerId,
-        paymentMethod: paymentMethodId
-      })
+  // Update all products in DB immediately
+  for (const s of allSubs) {
+    const newIncluded  = PLAN_INCLUDED_USERS[newPlan]
+    const newUserLimit = isDowngrade
+      ? Math.min(s.user_limit ?? newIncluded, newIncluded)
+      : (s.user_limit ?? PLAN_INCLUDED_USERS[newPlan])
 
-      const newSubscription = await stripe.subscriptions.create({
-        customer: customerId,
-        items: [{ price: priceId }],
-        default_payment_method: paymentMethodId,
-        metadata: {
-          tenant_id: data.tenantId,
-          plan: data.newPlan,
-        },
-      })
-
-      logger.info('🟢 [Billing] Subscription created directly', {
-        subscriptionId: newSubscription.id,
-        status: newSubscription.status
-      })
-
-      // Update billing record immediately
-      await createPlatformClient()
+    await platform
       .schema('platform')
       .from('product_subscriptions')
-      .upsert({
-        tenant_id: data.tenantId,
-        product: 'baselinedocs',
-        stripe_customer_id: customerId,
-        stripe_subscription_id: newSubscription.id,
-        plan: data.newPlan,
-        status: newSubscription.status,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'tenant_id,product' })
+      .update({ plan: newPlan, user_limit: newUserLimit })
+      .eq('tenant_id', tenantId)
+      .eq('product', s.product)
+  }
 
-      logger.info('🟢 [Billing] Database updated after direct subscription creation')
+  // Update Stripe subscriptions at period end
+  for (let i = 0; i < allSubs.length; i++) {
+    const s        = allSubs[i]
+    const position = Math.min(i + 1, 3) as 1 | 2 | 3
+    const priceId  = getPlanPriceId(newPlan, position)
+    if (!s.stripe_subscription_id || !priceId) continue
+    try {
+      const existing = await stripe.subscriptions.retrieve(s.stripe_subscription_id)
+      if (existing.status !== 'canceled') {
+        await stripe.subscriptions.update(s.stripe_subscription_id, {
+          items: [{ id: existing.items.data[0].id, price: priceId }],
+          proration_behavior: 'none',
+          billing_cycle_anchor: 'unchanged',
+          metadata: { tenant_id: tenantId, plan: newPlan, product: s.product },
+        })
+      }
+    } catch {
+      // Non-fatal — DB already updated
+    }
+  }
 
-      // Fetch next billing info for email
-      let nextBillingDate: string | null = null
-      let nextBillingAmount: number | null = null
-      try {
-        const subAny = newSubscription as any
-        nextBillingDate = subAny.billing_cycle_anchor
-          ? new Date((subAny.billing_cycle_anchor + 2592000) * 1000).toISOString()
-          : null
-        nextBillingAmount = (PLAN_PRICES[data.newPlan] || 0) * 100
-      } catch (e) { }
+  revalidatePath('/admin/billing')
+  return {
+    success: true,
+    message: `All tools ${isDowngrade ? 'downgraded' : 'upgraded'} to ${PLAN_NAMES[newPlan]}. Billing changes at next renewal.`,
+  }
+}
 
-      // Send confirmation email
-      await sendUpgradeConfirmation({
-        toEmail: user.email!,
-        companyName: tenantData?.company_name || tenantData?.subdomain,
-        previousPlan: currentBilling?.plan || 'trial',
-        newPlan: data.newPlan,
-        subscriptionId: newSubscription.id,
-        immediateCharge: null,  // New subscription, first full charge
-        nextBillingDate,
-        nextBillingAmount,
-      })
+// ─── adjustSeats ──────────────────────────────────────────────────────────────
 
-      revalidatePath('/admin/billing')
+export async function adjustSeats(delta: number): Promise<BillingActionResult> {
+  if (delta === 0) return { success: false, error: 'No change requested' }
 
+  const ctx = await getAdminContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const { tenantId } = ctx
+
+  const platform = createPlatformClient()
+  const product  = getProduct()
+
+  const { data: sub } = await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .select('plan, user_limit, stripe_subscription_id')
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
+    .single()
+
+  const currentPlan  = (sub?.plan ?? 'starter') as Plan
+  const currentLimit = sub?.user_limit ?? PLAN_INCLUDED_USERS[currentPlan]
+  const newLimit     = currentLimit + delta
+
+  if (newLimit < 1) return { success: false, error: 'Seat limit cannot go below 1' }
+  if (newLimit > 200) return { success: false, error: 'Seat counts above 200 require a custom contract. Contact sales.' }
+
+  // Block removal if it would put limit below active user count
+  if (delta < 0) {
+    const admin = createServiceRoleClient()
+    // Count from product-specific user_roles table (not shared.users)
+    const schemaName = product === 'baselinedocs' ? 'docs' : product === 'baselinereqs' ? 'reqs' : 'inventory'
+    const { count } = await admin
+      .schema(schemaName)
+      .from('user_roles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+    if ((count ?? 0) > newLimit) {
       return {
-        success: true,
-        message: 'Plan upgraded successfully!'
+        success: false,
+        error: `Cannot reduce to ${newLimit} seats — you have ${count} active users. Deactivate users first.`,
       }
     }
+  }
 
-    // No saved payment method (or forceCheckout) - redirect to Stripe Checkout
-    logger.info('🔵 [Billing] No saved payment method - creating checkout session...')
+  // DB: immediate
+  await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .update({ user_limit: newLimit })
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
 
-    const session = await createCheckoutSession({
-      customerId,
-      priceId,
-      tenantId: data.tenantId,
-      successUrl: `https://${subdomain}.baselinedocs.com/admin/billing?success=true`,
-      cancelUrl: `https://${subdomain}.baselinedocs.com/admin/billing?canceled=true`,
-    })
-
-    logger.info('🟢 [Billing] Checkout session created', {
-      sessionId: session.id,
-      url: session.url,
-      successUrl: `https://${subdomain}.baselinedocs.com/admin/billing?success=true`
-    })
-
-    // Update customer ID in database
-    await createPlatformClient()
-        .schema('platform')
-        .from('product_subscriptions')
-        .update({
-        stripe_customer_id: customerId,
-        updated_at: new Date().toISOString(),
-      })
-        .eq('tenant_id', data.tenantId)
-        .eq('product', 'baselinedocs')
-
-    logger.info('🟢 [Billing] Customer ID saved to database')
-
-    // Return checkout URL for redirect
-    return {
-      success: true,
-      checkoutUrl: session.url,
+  // Stripe: period end
+  const seatPriceId = getSeatPriceId(currentPlan)
+  if (sub?.stripe_subscription_id && seatPriceId) {
+    try {
+      const existing = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+      if (existing.status !== 'canceled') {
+        const includedSeats = PLAN_INCLUDED_USERS[currentPlan]
+        const addonSeats    = Math.max(newLimit - includedSeats, 0)
+        const seatItem      = existing.items.data.find(i => i.price.id === seatPriceId)
+        const params = addonSeats > 0
+          ? {
+              items: seatItem
+                ? [{ id: seatItem.id, quantity: addonSeats }]
+                : [{ price: seatPriceId, quantity: addonSeats }],
+              proration_behavior: 'none' as const,
+              billing_cycle_anchor: 'unchanged' as const,
+            }
+          : seatItem
+            ? {
+                items: [{ id: seatItem.id, deleted: true }],
+                proration_behavior: 'none' as const,
+                billing_cycle_anchor: 'unchanged' as const,
+              }
+            : null
+        if (params) await stripe.subscriptions.update(sub.stripe_subscription_id, params)
+      }
+    } catch (err) {
+      console.error('[adjustSeats] Stripe update failed — DB already updated:', err)
     }
-  } catch (error: any) {
-    logger.error('🔴 [Billing] FATAL ERROR', {
-      error: error.message,
-      stack: error.stack,
-      tenantId: data.tenantId
-    })
-    return {
-      success: false,
-      error: error.message || 'Failed to upgrade plan'
+  }
+
+  revalidatePath('/admin/billing')
+  const seatPrice = SEAT_ADDON_PRICE[currentPlan]
+  const dir = delta > 0
+    ? `Added ${delta} seat${delta > 1 ? 's' : ''}`
+    : `Removed ${Math.abs(delta)} seat${Math.abs(delta) > 1 ? 's' : ''}`
+  return {
+    success: true,
+    message: `${dir}. New limit: ${newLimit}. Billing change at next renewal ($${seatPrice}/seat/mo above ${PLAN_INCLUDED_USERS[currentPlan]} included).`,
+  }
+}
+
+// ─── adjustStorage ────────────────────────────────────────────────────────────
+
+export async function adjustStorage(deltaBlocks: number): Promise<BillingActionResult> {
+  if (deltaBlocks === 0) return { success: false, error: 'No change requested' }
+
+  const product = getProduct()
+  if (product !== 'baselinedocs') {
+    return { success: false, error: 'Storage add-ons are available for BaselineDocs only' }
+  }
+
+  const ctx = await getAdminContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const { tenantId } = ctx
+
+  const platform = createPlatformClient()
+
+  const { data: sub } = await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .select('plan, storage_limit_gb, stripe_subscription_id')
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
+    .single()
+
+  const currentPlan = (sub?.plan ?? 'starter') as Plan
+  const currentGB   = sub?.storage_limit_gb ?? PLAN_INCLUDED_STORAGE_GB[currentPlan]
+  const newGB       = Number(currentGB) + (deltaBlocks * STORAGE_BLOCK_GB)
+
+  if (newGB < STORAGE_BLOCK_GB) return { success: false, error: `Minimum storage is ${STORAGE_BLOCK_GB}GB` }
+
+  // DB: immediate
+  await platform
+    .schema('platform')
+    .from('product_subscriptions')
+    .update({ storage_limit_gb: newGB })
+    .eq('tenant_id', tenantId)
+    .eq('product', product)
+
+  // Stripe: period end — only bill blocks above plan-included amount
+  const storagePriceId = process.env.STRIPE_PRICE_STORAGE_10GB
+  if (sub?.stripe_subscription_id && storagePriceId) {
+    const includedGB    = PLAN_INCLUDED_STORAGE_GB[currentPlan]
+    const addonBlocks   = Math.max(Math.floor((newGB - includedGB) / STORAGE_BLOCK_GB), 0)
+    try {
+      const existing    = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+      if (existing.status !== 'canceled') {
+        const storageItem = existing.items.data.find(i => i.price.id === storagePriceId)
+        const params = addonBlocks > 0
+          ? {
+              items: storageItem
+                ? [{ id: storageItem.id, quantity: addonBlocks }]
+                : [{ price: storagePriceId, quantity: addonBlocks }],
+              proration_behavior: 'none' as const,
+              billing_cycle_anchor: 'unchanged' as const,
+            }
+          : storageItem
+            ? {
+                items: [{ id: storageItem.id, deleted: true }],
+                proration_behavior: 'none' as const,
+                billing_cycle_anchor: 'unchanged' as const,
+              }
+            : null
+        if (params) await stripe.subscriptions.update(sub.stripe_subscription_id, params)
+      }
+    } catch (err) {
+      console.error('[adjustStorage] Stripe update failed — DB already updated:', err)
     }
+  }
+
+  revalidatePath('/admin/billing')
+  const dir = deltaBlocks > 0
+    ? `Added ${deltaBlocks * STORAGE_BLOCK_GB}GB`
+    : `Removed ${Math.abs(deltaBlocks * STORAGE_BLOCK_GB)}GB`
+  return {
+    success: true,
+    message: `${dir}. New limit: ${newGB}GB. Billing change at next renewal.`,
   }
 }
