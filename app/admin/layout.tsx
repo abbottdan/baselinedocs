@@ -18,7 +18,11 @@ export default async function AdminLayout({
   }
 
   // Check admin status — allows both master_admin and tenant_admin
-  const { isAdmin, isMasterAdmin } = await requireAdmin(user!.id, supabase)
+  const subdomainTenantIdForCheck = await getSubdomainTenantId()
+  console.log('[AdminLayout] userId:', user!.id, 'subdomainTenantId:', subdomainTenantIdForCheck)
+  const adminResult = await requireAdmin(user!.id, supabase)
+  console.log('[AdminLayout] requireAdmin result:', JSON.stringify(adminResult))
+  const { isAdmin, isMasterAdmin } = adminResult
 
   if (!isAdmin) {
     redirect('/dashboard')
