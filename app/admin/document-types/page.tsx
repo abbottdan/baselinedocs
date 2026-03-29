@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { requireAdmin } from '@/lib/auth/require-admin'
 import { createClient, createSharedClient } from '@/lib/supabase/server'
 import { getDocumentTypes } from '@/app/actions/document-types';
 import DocumentTypesTable from '@/components/document-types/DocumentTypesTable';

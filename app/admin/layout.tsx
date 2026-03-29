@@ -1,49 +1,51 @@
+import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/require-admin'
 import { redirect } from 'next/navigation'
-import { getCurrentUser, isTenantAdmin } from '@/lib/tenant'
+import { getSubdomainTenantId } from '@/lib/tenant'
 import AdminNavTabs from './AdminNavTabs'
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser()
-  if (!user) redirect('/auth/login')
-  if (!await isTenantAdmin()) redirect('/dashboard')
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const supabase = await createClient()
 
-  const subdomain = user.tenant?.subdomain
+  // Check authentication
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    redirect('/')
+  }
+
+  // Check admin status — allows both master_admin and tenant_admin
+  const { isAdmin, isMasterAdmin } = await requireAdmin(user!.id, supabase)
+
+  if (!isAdmin) {
+    redirect('/dashboard')
+  }
+
+  // Get tenant from CURRENT SUBDOMAIN (not user's home tenant)
+  const subdomainTenantId = await getSubdomainTenantId()
+  if (!subdomainTenantId) {
+    redirect('/dashboard')
+  }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#F8FAFC', paddingTop: 32, paddingBottom: 32 }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px' }}>
-        <div className="space-y-6">
+    <div className="min-h-screen py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Panel</h1>
+          <p className="mt-2 text-gray-600">Manage users, settings, and configuration</p>
+        </div>
 
-          {/* Header */}
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Administration</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Manage your organisation settings and users</p>
-          </div>
+        {/* Admin Navigation Tabs */}
+        <AdminNavTabs 
+          isMasterAdmin={isMasterAdmin}
+        />
 
-          {/* Cross-product switcher */}
-          {subdomain && (
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="font-medium text-slate-400 uppercase tracking-wide text-[10px]">Also manage:</span>
-              <a
-                href={`https://${subdomain}.${process.env.NEXT_PUBLIC_REQS_DOMAIN ?? 'baselinereqs.com'}/admin/users`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#DC2626] hover:text-[#DC2626] transition-colors"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
-                BaselineReqs
-              </a>
-              <a
-                href={`https://${subdomain}.${process.env.NEXT_PUBLIC_INVENTORY_DOMAIN ?? 'baselineinventory.com'}/admin/users`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#15803D] hover:text-[#15803D] transition-colors"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#15803D]" />
-                BaselineInventory
-              </a>
-            </div>
-          )}
-
-          {/* Tab bar */}
-          <AdminNavTabs />
-
+        {/* Content */}
+        <div>
           {children}
         </div>
       </div>

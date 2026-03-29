@@ -1,98 +1,90 @@
-// @ts-nocheck
-import { redirect } from 'next/navigation'
-import { getCurrentUser, isTenantAdmin } from '@/lib/tenant'
-import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
+/**
+ * Updated User Management Page with Limit Banner
+ * app/admin/users/page.tsx
+ */
+
+import { requireAdmin } from '@/lib/auth/require-admin'
+import { createClient, createServiceRoleClient, createSharedClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
-import { getExistingTenantUsers } from '@/app/actions/user-management'
-import UserManagementTable from '@/app/admin/users/UserManagementTable'
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import UserManagementTable from './UserManagementTable'
 import UserLimitBanner from '@/components/admin/UserLimitBanner'
 
-export const metadata = { title: 'User Management' }
+export default async function UsersPage() {
+  const supabase = await createClient()
 
-export default async function AdminUsersPage() {
-  const currentUser = await getCurrentUser()
-  if (!currentUser) redirect('/auth/login')
-  if (!await isTenantAdmin()) redirect('/dashboard')
-
-  const sharedClient  = createSharedClient()
-  const serviceClient = createServiceRoleClient()
-  const platform      = createPlatformClient()
-
-  // 1. Identity — shared.users for this tenant
-  const { data: sharedUsers } = await sharedClient
-    .schema('shared')
-    .from('users')
-    .select('id, email, full_name, is_active, is_master_admin, created_at')
-    .eq('tenant_id', currentUser.tenant_id)
-    .order('created_at', { ascending: false })
-
-  // 2. Roles — docs.user_roles
-  const { data: roleRows } = await serviceClient
-    .schema('docs')
-    .from('user_roles')
-    .select('user_id, role')
-    .eq('tenant_id', currentUser.tenant_id)
-
-  // 3. Last sign-in — auth.users (shared.users.last_sign_in_at is always null)
-  //    Wrap in try/catch — failure must never block the page from loading
-  let lastSignInByUserId: Record<string, string | null> = {}
-  try {
-    const { data: authData } = await serviceClient.auth.admin.listUsers({ perPage: 1000 })
-    if (authData?.users) {
-      lastSignInByUserId = Object.fromEntries(
-        authData.users.map(u => [u.id, u.last_sign_in_at ?? null])
-      )
-    }
-  } catch (err) {
-    console.error('[AdminUsersPage] Failed to fetch auth.users last_sign_in_at:', err)
+  // Check authentication
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  
+  if (userError || !user) {
+    redirect('/')
   }
 
-  // 4. Filter-before-map — only users with an explicit docs.user_roles row appear in the table.
-  //    Users in shared.users with no role row are on other ClearStride products and must not show here.
-  const roleByUserId = Object.fromEntries((roleRows ?? []).map(r => [r.user_id, r.role]))
-  const users = (sharedUsers ?? [])
-    .filter(u => u.is_master_admin || roleByUserId[u.id] !== undefined)
-    .map(u => ({
-      ...u,
-      role:            u.is_master_admin ? 'master_admin' : roleByUserId[u.id],
-      last_sign_in_at: lastSignInByUserId[u.id] ?? null,
-    }))
+  const { isAdmin, tenantId: userTenantId } = await requireAdmin(user!.id, supabase)
+  if (!isAdmin) {
+    redirect('/dashboard')
+  }
 
-  // 5. Eligible existing users for the Add User dropdown
-  const { data: existingTenantUsers } = await getExistingTenantUsers()
+  // Get subdomain tenant (for multi-tenant support)
+  const cookieStore = await cookies()
+  const subdomainCookie = cookieStore.get('tenant_subdomain')
+  const subdomain = subdomainCookie?.value
 
-  // 6. Plan limits for UserLimitBanner
-  const { data: subscription } = await platform
-    .schema('platform')
+  let targetTenantId = userTenantId
+
+  if (subdomain) {
+    const { data: subdomainTenant } = await createPlatformClient()
+        .schema('platform')
+      .from('tenants')
+      .select('id')
+      .eq('subdomain', subdomain)
+      .single()
+    
+    if (subdomainTenant) {
+      targetTenantId = subdomainTenant.id
+    }
+  }
+
+  // Get user limit information for banner
+  const supabaseAdmin = createServiceRoleClient()
+  
+  // Get billing info
+  const { data: billingData } = await supabase
     .from('product_subscriptions')
     .select('plan, user_limit')
-    .eq('tenant_id', currentUser.tenant_id)
-    .eq('product', 'baselinedocs')
+    .eq('tenant_id', targetTenantId)
     .single()
 
-  const { count: currentUserCount } = await serviceClient
+  // Count current users (exclude deactivated, use admin client to bypass RLS)
+  const { count: currentUserCount } = await supabaseAdmin
     .schema('shared')
     .from('users')
     .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', currentUser.tenant_id)
-    .eq('is_active', true)
+    .eq('tenant_id', targetTenantId)
+    .neq('role', 'Deactivated')
 
-  const plan         = subscription?.plan       ?? 'trial'
-  const userLimit    = subscription?.user_limit ?? 5
-  const currentUsers = currentUserCount         ?? 0
+  const plan = billingData?.plan || 'trial'
+  const userLimit = billingData?.user_limit || 5
+  const currentUsers = currentUserCount || 0
 
   return (
-    <div className="space-y-5">
-      <UserLimitBanner
-        currentUsers={currentUsers}
-        userLimit={userLimit}
-        plan={plan}
-      />
-      <UserManagementTable
-        users={users}
-        currentUserId={currentUser.id}
-        existingTenantUsers={existingTenantUsers ?? []}
-      />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+          <p className="mt-2 text-gray-600">Manage user roles and permissions</p>
+        </div>
+
+        {/* User Limit Banner */}
+        <UserLimitBanner 
+          currentUsers={currentUsers}
+          userLimit={userLimit}
+          plan={plan}
+        />
+
+        <UserManagementTable />
+      </div>
     </div>
   )
 }
