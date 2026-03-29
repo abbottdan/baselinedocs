@@ -127,7 +127,7 @@ export function UpgradePlanDialog({
         onOpenChange(false)
         router.refresh()
       } else {
-        toast.error('Upgrade Failed', { description: result.error })
+        toast.error('Upgrade Failed', { description: (!result.success ? result.error : undefined) })
       }
     } catch (error) {
       toast.error('Upgrade Failed', { description: 'An unexpected error occurred' })
@@ -151,7 +151,7 @@ export function UpgradePlanDialog({
       if (result.success && result.checkoutUrl) {
         window.location.href = result.checkoutUrl
       } else {
-        toast.error('Upgrade Failed', { description: result.error || 'Could not create checkout session' })
+        toast.error('Upgrade Failed', { description: (!result.success ? result.error : undefined) || 'Could not create checkout session' })
         setIsUpgrading(false)
       }
     } catch (error) {
