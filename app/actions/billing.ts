@@ -18,7 +18,7 @@ import { createPlatformClient } from '@/lib/supabase/platform'
 import { getCurrentSubdomain, getSubdomainTenantId } from '@/lib/tenant'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { revalidatePath } from 'next/cache'
-import { stripe } from '@/lib/stripe'
+import { stripe, getOrCreateStripeCustomer as stripeGetOrCreateCustomer } from '@/lib/stripe/client'
 import {
   PLAN_ORDER, PLAN_INCLUDED_USERS, PLAN_INCLUDED_STORAGE_GB,
   SEAT_ADDON_PRICE, STORAGE_BLOCK_GB, PLAN_NAMES,
@@ -93,21 +93,12 @@ async function getOrCreateStripeCustomer(opts: {
   companyName: string
   existingCustomerId: string | null
 }): Promise<string> {
-  if (opts.existingCustomerId) return opts.existingCustomerId
-
-  const customer = await stripe.customers.create({
+  return stripeGetOrCreateCustomer({
+    tenantId: opts.tenantId,
     email: opts.email,
-    name:  opts.companyName,
-    metadata: { tenant_id: opts.tenantId },
+    companyName: opts.companyName,
+    existingCustomerId: opts.existingCustomerId ?? undefined,
   })
-
-  await createPlatformClient()
-    .schema('platform')
-    .from('tenants')
-    .update({ stripe_customer_id: customer.id })
-    .eq('id', opts.tenantId)
-
-  return customer.id
 }
 
 // ─── changePlan ───────────────────────────────────────────────────────────────
