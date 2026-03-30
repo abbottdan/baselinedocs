@@ -10,7 +10,7 @@
  *   if (error) return { success: false, error }
  */
 
-import { createSharedClient, createServiceRoleClient} from '@/lib/supabase/server'
+import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 
 export interface AdminCheckResult {
