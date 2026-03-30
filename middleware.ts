@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createClient, createSharedClient } from '@/lib/supabase/server'
+import { createClient, createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createPlatformClient } from '@/lib/supabase/platform'
 
 const COOKIE_DOMAIN  = '.baselinedocs.com'
@@ -94,13 +94,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Master admins bypass all product-level checks
+  // Master admins bypass all checks
   if (userData.is_master_admin) {
     console.log('[Middleware] Master admin — access granted')
     return response
   }
 
-  // Resolve user's home tenant subdomain from the platform DB
+  // Resolve tenant subdomain from platform DB
   const platform = createPlatformClient()
   const { data: tenant } = await platform
     .schema('platform')
@@ -126,10 +126,7 @@ export async function middleware(request: NextRequest) {
 
   console.log('[Middleware] Tenant match — access granted')
 
-  // ── Subscription check ───────────────────────────────────────────────────────
-  // Verify tenant has an active/trialing subscription for this product.
-  // Also enforces trial expiry — expired trials redirect to /trial-expired.
-  // Billing and auth paths remain accessible so the tenant can subscribe.
+  // Subscription check
   const { data: subscription } = await platform
     .schema('platform')
     .from('product_subscriptions')
@@ -148,22 +145,23 @@ export async function middleware(request: NextRequest) {
 
   // Trial expiry — allow /admin/billing so they can upgrade
   if (['trialing', 'trial'].includes(subscription.status) && subscription.trial_ends_at) {
-    const expired    = new Date(subscription.trial_ends_at) < new Date()
-    const billingOk  = pathname.startsWith('/admin/billing')
+    const expired   = new Date(subscription.trial_ends_at) < new Date()
+    const billingOk = pathname.startsWith('/admin/billing')
     if (expired && !billingOk) {
       console.log('[Middleware] Trial expired for:', userTenantSubdomain)
       return NextResponse.redirect(new URL('/trial-expired', request.url))
     }
   }
-  // ── End subscription check ───────────────────────────────────────────────────
 
-  // Route guards
+  // /system-admin: master admin only (already handled above)
   if (pathname.startsWith('/system-admin')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // /admin: must be tenant_admin or master_admin in docs.user_roles
+  // IMPORTANT: use createServiceRoleClient — anon client RLS blocks this query
   if (pathname.startsWith('/admin')) {
-    const { data: roleRow } = await supabase
+    const { data: roleRow } = await createServiceRoleClient()
       .schema(PRODUCT_SCHEMA)
       .from('user_roles')
       .select('role')
@@ -171,9 +169,14 @@ export async function middleware(request: NextRequest) {
       .eq('tenant_id', userData.tenant_id)
       .single()
 
+    console.log('[Middleware] /admin role check — role:', roleRow?.role ?? 'none')
+
     if (!['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')) {
+      console.log('[Middleware] /admin blocked — insufficient role for user:', user.email)
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
+
+    console.log('[Middleware] /admin granted for:', user.email)
   }
 
   return response
