@@ -1,14 +1,4 @@
-/**
- * lib/auth/require-admin.ts
- *
- * Shared helper for admin permission checks across all server actions.
- * Replaces the inline two-step pattern scattered across user-management.ts,
- * document-types.ts, admin pages, etc.
- *
- * Usage:
- *   const { isAdmin, isMasterAdmin, tenantId, error } = await requireAdmin(userId, supabase)
- *   if (error) return { success: false, error }
- */
+'use server'
 
 import { createSharedClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
@@ -20,18 +10,12 @@ export interface AdminCheckResult {
   error?: string
 }
 
-/**
- * Check if a user is an admin (master_admin or tenant_admin).
- * Uses shared.users for is_master_admin, falls back to docs.user_roles for tenant_admin.
- *
- * @param userId  - The auth user ID to check
- * @param supabase - Optional existing supabase client (avoids creating a second one)
- */
 export async function requireAdmin(
   userId: string,
   supabase?: Awaited<ReturnType<typeof createClient>>
 ): Promise<AdminCheckResult> {
-  const client = supabase ?? await createClient()
+  console.log('[requireAdmin] START userId:', userId)
+
   const sharedClient = createSharedClient()
 
   const { data: sharedUser, error: userError } = await sharedClient
@@ -41,21 +25,34 @@ export async function requireAdmin(
     .eq('id', userId)
     .single()
 
-  if (userError || !sharedUser) {
+  if (userError) {
+    console.log('[requireAdmin] shared.users query ERROR:', JSON.stringify(userError))
     return { isAdmin: false, isMasterAdmin: false, tenantId: null, error: 'User not found' }
   }
 
+  if (!sharedUser) {
+    console.log('[requireAdmin] shared.users: no row found for userId:', userId)
+    return { isAdmin: false, isMasterAdmin: false, tenantId: null, error: 'User not found' }
+  }
+
+  console.log('[requireAdmin] shared.users row:', JSON.stringify({
+    tenant_id: sharedUser.tenant_id,
+    is_master_admin: sharedUser.is_master_admin,
+    is_active: sharedUser.is_active,
+  }))
+
   if (!sharedUser.is_active) {
+    console.log('[requireAdmin] FAIL: user is_active=false')
     return { isAdmin: false, isMasterAdmin: false, tenantId: sharedUser.tenant_id, error: 'Account is deactivated' }
   }
 
-  // Master admins are always admins
   if (sharedUser.is_master_admin) {
+    console.log('[requireAdmin] PASS: is_master_admin=true')
     return { isAdmin: true, isMasterAdmin: true, tenantId: sharedUser.tenant_id }
   }
 
   // Check docs.user_roles for tenant_admin
-  const { data: roleRow } = await createServiceRoleClient()
+  const { data: roleRow, error: roleError } = await createServiceRoleClient()
     .schema('docs')
     .from('user_roles')
     .select('role')
@@ -63,7 +60,14 @@ export async function requireAdmin(
     .eq('tenant_id', sharedUser.tenant_id)
     .single()
 
+  if (roleError) {
+    console.log('[requireAdmin] docs.user_roles query ERROR:', JSON.stringify(roleError))
+  }
+
+  console.log('[requireAdmin] docs.user_roles row:', JSON.stringify(roleRow ?? null))
+
   const isAdmin = ['tenant_admin', 'master_admin'].includes(roleRow?.role ?? '')
+  console.log('[requireAdmin] RESULT isAdmin:', isAdmin, 'role:', roleRow?.role ?? 'none')
 
   return {
     isAdmin,
@@ -73,10 +77,6 @@ export async function requireAdmin(
   }
 }
 
-/**
- * Like requireAdmin but throws/returns error string if not admin.
- * Convenience wrapper for actions that want early return pattern.
- */
 export async function assertAdmin(
   userId: string,
   supabase?: Awaited<ReturnType<typeof createClient>>
